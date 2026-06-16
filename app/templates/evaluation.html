@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block title %}Evaluasi Metrik - Analisis Risiko Kesehatan Lansia{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Evaluasi K-Means & Penentuan K Optimal</h1>
+    <p class="page-subtitle">Rekomendasi jumlah klaster berdasarkan pengujian matematis multi-metrik</p>
+</div>
+
+<!-- Recommendation Card -->
+<div class="glass-card mb-4 border-start border-4 border-info">
+    <div class="row align-items-center">
+        <div class="col-md-9">
+            <h4 class="fw-bold"><i class="fas fa-magic text-info me-2"></i>Rekomendasi Klaster Sistem</h4>
+            <p class="text-secondary mb-0" style="font-size: 0.9rem;">
+                Berdasarkan pengujian K=2 s/d K=10, jumlah cluster yang direkomendasikan adalah:
+                <strong class="text-primary">K = {{ summary.best_k.silhouette }}</strong> (Silhouette Score tertinggi), 
+                <strong class="text-success">K = {{ summary.best_k.davies_bouldin }}</strong> (Davies-Bouldin Index terkecil), dan
+                <strong class="text-warning">K = {{ summary.best_k.calinski_harabasz }}</strong> (Calinski-Harabasz Score tertinggi).
+                Sesi saat ini berjalan dengan <span class="badge bg-primary">K = {{ summary.current_k }}</span>.
+            </p>
+        </div>
+        <div class="col-md-3 text-md-end mt-3 mt-md-0">
+            <a href="{{ url_for('clustering.index') }}" class="btn btn-outline-info rounded-3 btn-sm">
+                <i class="fas fa-edit me-1"></i> Sesuaikan K Sesi
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Line Charts for Metrics -->
+<div class="row g-4 mb-4">
+    <!-- Chart 1: Elbow Method (SSE) -->
+    <div class="col-md-6">
+        <div class="glass-card">
+            <h5><i class="fas fa-bezier-curve me-2 text-danger"></i>Metode Elbow (Sum of Squared Errors)</h5>
+            <div id="elbow-chart" style="height: 250px;"></div>
+        </div>
+    </div>
+    <!-- Chart 2: Silhouette Score -->
+    <div class="col-md-6">
+        <div class="glass-card">
+            <h5><i class="fas fa-circle-notch me-2 text-primary"></i>Silhouette Score Per K</h5>
+            <div id="silhouette-chart" style="height: 250px;"></div>
+        </div>
+    </div>
+    <!-- Chart 3: Davies-Bouldin Index -->
+    <div class="col-md-6">
+        <div class="glass-card">
+            <h5><i class="fas fa-chart-line me-2 text-success"></i>Davies-Bouldin Index Per K</h5>
+            <div id="dbi-chart" style="height: 250px;"></div>
+        </div>
+    </div>
+    <!-- Chart 4: Calinski-Harabasz Score -->
+    <div class="col-md-6">
+        <div class="glass-card">
+            <h5><i class="fas fa-shield-alt me-2 text-warning"></i>Calinski-Harabasz Score Per K</h5>
+            <div id="ch-chart" style="height: 250px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Academic Interpretations & Explanations -->
+<div class="glass-card">
+    <h4 class="mb-4"><i class="fas fa-book-reader text-primary me-2"></i>Landasan Teori Evaluasi Metrik</h4>
+    
+    <div class="row g-4">
+        {% for name, interpretation in summary.interpretations.items() %}
+        <div class="col-md-4">
+            <div class="border rounded-4 p-3 h-100 d-flex flex-column gap-2" style="background: var(--bg-secondary); border-color: var(--border-color) !important;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0 text-capitalize">{{ name.replace('_', ' ') }}</h5>
+                    <span class="badge bg-{{ interpretation.color }}">{{ interpretation.quality }}</span>
+                </div>
+                <div class="fs-4 fw-bold mt-1 text-{{ interpretation.color }}">{{ interpretation.score|format_value }}</div>
+                <p class="text-secondary" style="font-size: 0.8rem; line-height: 1.5;">{{ interpretation.explanation }}</p>
+                <div class="border-top pt-2 mt-auto" style="border-color: var(--border-color) !important;">
+                    <div class="text-secondary mb-1" style="font-size: 0.75rem;"><strong>Rumus:</strong></div>
+                    <code class="d-block p-1 bg-dark text-light rounded text-center mb-2" style="font-size: 0.7rem;">{{ interpretation.formula }}</code>
+                    <div class="text-secondary mb-1" style="font-size: 0.75rem;"><strong>Kelebihan:</strong></div>
+                    <ul class="text-secondary" style="font-size: 0.75rem; padding-left: 1.1rem; margin-bottom: 0;">
+                        {% for key in interpretation.kelebihan %}
+                        <li>{{ key }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        fetch('/api/evaluation/chart')
+            .then(res => res.json())
+            .then(data => {
+                const theme = document.documentElement.getAttribute('data-theme') || 'light';
+                const chartText = theme === 'dark' ? '#f3f4f6' : '#1f2937';
+                const gridColor = theme === 'dark' ? '#374151' : '#e5e7eb';
+
+                const k_vals = data.k_eval_data.map(d => d.k);
+                const sil_scores = data.k_eval_data.map(d => d.silhouette_score);
+                const dbi_scores = data.k_eval_data.map(d => d.davies_bouldin_index);
+                const ch_scores = data.k_eval_data.map(d => d.calinski_harabasz_score);
+                
+                // Elbow Method K values: 1 to 10
+                const elbow_k = Array.from({length: data.elbow_inertias.length}, (_, i) => i + 1);
+                
+                const baseLayout = {
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: chartText },
+                    margin: { t: 15, b: 35, l: 45, r: 15 },
+                    xaxis: { gridcolor: gridColor, title: 'K (Jumlah Cluster)' },
+                    yaxis: { gridcolor: gridColor }
+                };
+
+                // 1. Elbow
+                Plotly.newPlot('elbow-chart', [{
+                    x: elbow_k,
+                    y: data.elbow_inertias,
+                    mode: 'lines+markers',
+                    line: { color: '#ef4444', width: 2.5 },
+                    marker: { size: 6 }
+                }], baseLayout, {responsive: true, displayModeBar: false});
+
+                // 2. Silhouette
+                Plotly.newPlot('silhouette-chart', [{
+                    x: k_vals,
+                    y: sil_scores,
+                    mode: 'lines+markers',
+                    line: { color: '#3b82f6', width: 2.5 },
+                    marker: { size: 6 }
+                }], baseLayout, {responsive: true, displayModeBar: false});
+
+                // 3. DBI
+                Plotly.newPlot('dbi-chart', [{
+                    x: k_vals,
+                    y: dbi_scores,
+                    mode: 'lines+markers',
+                    line: { color: '#10b981', width: 2.5 },
+                    marker: { size: 6 }
+                }], baseLayout, {responsive: true, displayModeBar: false});
+
+                // 4. CH
+                Plotly.newPlot('ch-chart', [{
+                    x: k_vals,
+                    y: ch_scores,
+                    mode: 'lines+markers',
+                    line: { color: '#f59e0b', width: 2.5 },
+                    marker: { size: 6 }
+                }], baseLayout, {responsive: true, displayModeBar: false});
+
+                window.addEventListener('themeChanged', () => {
+                    const newTheme = document.documentElement.getAttribute('data-theme');
+                    const newTextColor = newTheme === 'dark' ? '#f3f4f6' : '#1f2937';
+                    const newGridColor = newTheme === 'dark' ? '#374151' : '#e5e7eb';
+                    
+                    const relayout = {
+                        font: { color: newTextColor },
+                        xaxis: { gridcolor: newGridColor, title: 'K (Jumlah Cluster)' },
+                        yaxis: { gridcolor: newGridColor }
+                    };
+                    
+                    Plotly.relayout('elbow-chart', relayout);
+                    Plotly.relayout('silhouette-chart', relayout);
+                    Plotly.relayout('dbi-chart', relayout);
+                    Plotly.relayout('ch-chart', relayout);
+                });
+            });
+    });
+</script>
+{% endblock %}

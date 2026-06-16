@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}Hasil Preprocessing - Analisis Risiko Kesehatan Lansia{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Hasil Preprocessing Data</h1>
+    <p class="page-subtitle">Rincian pembersihan data, penanganan missing values, deteksi outlier, dan deskripsi statistik</p>
+</div>
+
+<!-- Preprocessing Audit Stats -->
+<div class="row g-4 mb-4">
+    <div class="col-md-12">
+        <div class="glass-card h-100">
+            <h4 class="mb-3"><i class="fas fa-clipboard-check text-success me-2"></i>Audit Pembersihan Data</h4>
+            <div class="row g-3">
+                <div class="col-6 col-sm-3 text-center border-end">
+                    <div class="text-secondary" style="font-size: 0.8rem;">Sheet Diproses</div>
+                    <h3 class="fw-bold mt-1 text-info">{{ summary.stats.sheets_diproses }}</h3>
+                </div>
+                <div class="col-6 col-sm-3 text-center border-end">
+                    <div class="text-secondary" style="font-size: 0.8rem;">Baris Mentah</div>
+                    <h3 class="fw-bold mt-1 text-warning">{{ summary.stats.total_baris_mentah }}</h3>
+                </div>
+                <div class="col-6 col-sm-3 text-center border-end">
+                    <div class="text-secondary" style="font-size: 0.8rem;">Data Valid</div>
+                    <h3 class="fw-bold mt-1 text-success">{{ summary.stats.total_valid }}</h3>
+                </div>
+                <div class="col-6 col-sm-3 text-center">
+                    <div class="text-secondary" style="font-size: 0.8rem;">Baris Dihapus</div>
+                    <h3 class="fw-bold mt-1 text-danger">{{ summary.stats.baris_dihapus }}</h3>
+                </div>
+            </div>
+            <div class="mt-4 pt-3 border-top text-secondary" style="font-size: 0.85rem; border-color: var(--border-color) !important;">
+                <p class="mb-1"><i class="fas fa-info-circle me-1 text-info"></i> <strong>Baris Dihapus</strong> mencakup baris bertuliskan "TOTAL", subtotal, rekapitulasi, baris kosong, atau baris tanpa nama lansia yang valid.</p>
+                <p class="mb-0"><i class="fas fa-exclamation-triangle me-1 text-warning"></i> <strong>Data Tidak Valid Terdeteksi:</strong> Umur tidak valid: {{ summary.stats.umur_invalid }} | IMT tidak valid: {{ summary.stats.imt_invalid }} | TD tidak valid: {{ summary.stats.td_invalid }} (Sistem mengimputasi data kosong/tidak valid menggunakan median per desa).</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Descriptive Stats Table -->
+<div class="glass-card mb-4">
+    <h4 class="mb-3"><i class="fas fa-calculator text-primary me-2"></i>Ringkasan Statistik Deskriptif (Setelah Preprocessing)</h4>
+    <div class="table-scroll-wrapper">
+        <div class="table-scroll-hint">
+            <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+        </div>
+        <div class="scroll-indicator left"></div>
+        <div class="scroll-indicator right"></div>
+        <div class="table-scroll-inner">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Variabel Kesehatan</th>
+                        <th>Jumlah Data</th>
+                        <th>Mean</th>
+                        <th>Std Deviasi</th>
+                        <th>Min</th>
+                        <th>Median</th>
+                        <th>Max</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for col, stats in summary.desc_stats.items() %}
+                    <tr>
+                        <td class="fw-bold text-capitalize">{{ col.replace('_', ' ') }}</td>
+                        <td>{{ stats.count }}</td>
+                        <td>{{ stats.mean }}</td>
+                        <td>{{ stats.std }}</td>
+                        <td>{{ stats.min }}</td>
+                        <td>{{ stats.median }}</td>
+                        <td>{{ stats.max }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Clean Data Preview -->
+<div class="glass-card">
+    <h4 class="mb-3"><i class="fas fa-table text-info me-2"></i>Preview Data Bersih (Maksimal 100 Baris Pertama)</h4>
+    <div class="table-scroll-wrapper">
+        <div class="table-scroll-hint">
+            <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+        </div>
+        <div class="scroll-indicator left"></div>
+        <div class="scroll-indicator right"></div>
+        <div class="table-scroll-inner">
+            {{ table_html|safe }}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // Initialize DataTable on the raw preview table
+        $('.table:last').DataTable({
+            "pageLength": 10,
+            "lengthMenu": [5, 10, 25, 50, 100],
+            "language": {
+                "search": "Cari lansia:",
+                "lengthMenu": "Tampilkan _MENU_ baris",
+                "info": "Menampilkan _START_ sampai _END_ dari _TOTAL_ lansia",
+                "paginate": {
+                    "next": "Berikutnya",
+                    "previous": "Sebelumnya"
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+
+{% block title %}Peta GIS Lansia - Analisis Risiko Kesehatan Lansia{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Peta Spasial GIS Wilayah Lansia</h1>
+    <p class="page-subtitle">Distribusi geografis dan tingkat risiko kesehatan lansia Puskesmas Tempeh Lumajang per desa</p>
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="glass-card text-center py-3 px-2">
+            <div style="font-size: 1.9rem; font-weight: 700; color: #6366f1;">{{ total }}</div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; margin-top: 2px;">Total Lansia</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass-card text-center py-3 px-2">
+            <div style="font-size: 1.9rem; font-weight: 700; color: #10b981;">{{ sehat }}</div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; margin-top: 2px;">Relatif Sehat</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass-card text-center py-3 px-2">
+            <div style="font-size: 1.9rem; font-weight: 700; color: #f59e0b;">{{ sedang }}</div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; margin-top: 2px;">Risiko Sedang</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass-card text-center py-3 px-2">
+            <div style="font-size: 1.9rem; font-weight: 700; color: #ef4444;">{{ tinggi }}</div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; margin-top: 2px;">Risiko Tinggi</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Controls -->
+<div class="glass-card mb-3 py-3 px-4 d-flex align-items-center gap-3 flex-wrap">
+    <span style="font-weight: 600; font-size: 0.9rem;">
+        <i class="fas fa-filter me-2" style="color: var(--accent-primary);"></i>Filter Tampilan Peta:
+    </span>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('gis.index', risk_level='all') }}"
+           class="btn btn-sm {% if active_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+            <i class="fas fa-globe me-1"></i>Semua ({{ total }})
+        </a>
+        <a href="{{ url_for('gis.index', risk_level='sehat') }}"
+           class="btn btn-sm {% if active_filter == 'sehat' %}btn-success{% else %}btn-outline-success{% endif %}">
+            <i class="fas fa-heart me-1"></i>Sehat ({{ sehat }})
+        </a>
+        <a href="{{ url_for('gis.index', risk_level='sedang') }}"
+           class="btn btn-sm {% if active_filter == 'sedang' %}btn-warning{% else %}btn-outline-warning{% endif %}">
+            <i class="fas fa-exclamation-triangle me-1"></i>Risiko Sedang ({{ sedang }})
+        </a>
+        <a href="{{ url_for('gis.index', risk_level='tinggi') }}"
+           class="btn btn-sm {% if active_filter == 'tinggi' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+            <i class="fas fa-skull-crossbones me-1"></i>Risiko Tinggi ({{ tinggi }})
+        </a>
+    </div>
+</div>
+
+<!-- Map Container -->
+<div class="glass-card p-2 mb-4" style="overflow: hidden;">
+    <iframe
+        id="gis-map-frame"
+        src="{{ url_for('gis.serve_map', risk_level=active_filter) }}"
+        class="w-100 border-0 rounded-4"
+        style="height: 560px; min-height: 560px;">
+    </iframe>
+</div>
+
+<!-- Desa Summary Table + Legend Panel -->
+<div class="row g-4 mb-4">
+    <!-- Tabel Per Desa -->
+    <div class="col-lg-8">
+        <div class="glass-card h-100">
+            <h4 class="mb-3"><i class="fas fa-table text-primary me-2"></i>Distribusi Risiko per Desa</h4>
+            <div class="table-scroll-wrapper">
+                <div class="table-scroll-inner">
+                    <table class="table table-hover table-striped table-bordered align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Desa</th>
+                                <th class="text-center">Total</th>
+                                <th class="text-center" style="color: #10b981;">Sehat</th>
+                                <th class="text-center" style="color: #f59e0b;">Sedang</th>
+                                <th class="text-center" style="color: #ef4444;">Tinggi</th>
+                                <th class="text-center">% Risiko</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in desa_table %}
+                            {% set pct_risk = ((d.sedang + d.tinggi) / d.total * 100) | round(1) if d.total > 0 else 0 %}
+                            <tr {% if active_filter != 'all' %}
+                                style="{% if active_filter == 'sehat' and d.sehat == 0 %}opacity:0.35;{% elif active_filter == 'sedang' and d.sedang == 0 %}opacity:0.35;{% elif active_filter == 'tinggi' and d.tinggi == 0 %}opacity:0.35;{% endif %}"
+                                {% endif %}>
+                                <td><strong>{{ d.desa.title() }}</strong></td>
+                                <td class="text-center"><span class="badge bg-secondary">{{ d.total }}</span></td>
+                                <td class="text-center"><span class="badge" style="background:#10b981;">{{ d.sehat }}</span></td>
+                                <td class="text-center"><span class="badge" style="background:#f59e0b;">{{ d.sedang }}</span></td>
+                                <td class="text-center"><span class="badge bg-danger">{{ d.tinggi }}</span></td>
+                                <td class="text-center">
+                                    <div class="progress" style="height: 16px; min-width: 70px;">
+                                        <div class="progress-bar bg-danger" style="width: {{ pct_risk }}%;" title="{{ pct_risk }}%">{{ pct_risk }}%</div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Guide Panel -->
+    <div class="col-lg-4">
+        <div class="glass-card h-100">
+            <h4 class="mb-3"><i class="fas fa-info-circle text-primary me-2"></i>Panduan Peta</h4>
+            <ul class="text-secondary d-flex flex-column gap-2" style="font-size: 0.84rem; padding-left: 1.2rem;">
+                <li><strong>Batas Wilayah Desa:</strong> Area berwarna menunjukkan batas administratif tiap desa. Warna area menggambarkan persentase tingkat risiko kesehatan lansia sesuai filter yang aktif.</li>
+                <li><strong>Hover Info:</strong> Arahkan kursor ke wilayah desa untuk melihat ringkasan statistik risiko lansia di desa tersebut.</li>
+                <li><strong>Klik Wilayah:</strong> Klik pada area desa untuk melihat popup detail distribusi risiko kesehatan lansia.</li>
+                <li><strong>Filter:</strong> Gunakan tombol di atas untuk memfilter tampilan warna desa berdasarkan tingkat risiko.</li>
+                <li><strong>Layer Control (kanan atas peta):</strong> Aktifkan/nonaktifkan layer peta atau beralih ke citra satelit.</li>
+            </ul>
+            <hr style="border-color: var(--border-color);">
+            <h6 class="mb-2" style="font-size: 0.85rem;">Kriteria Tingkat Risiko:</h6>
+            <div style="font-size: 0.8rem;" class="d-flex flex-column gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge" style="background:#10b981; font-size: 0.75rem;">Sehat</span>
+                    <span class="text-secondary">Skor 0: TD normal, IMT normal, GD normal</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge" style="background:#f59e0b; font-size: 0.75rem;">Sedang</span>
+                    <span class="text-secondary">Skor 1–2: Salah satu atau dua indikator melampaui batas</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-danger" style="font-size: 0.75rem;">Tinggi</span>
+                    <span class="text-secondary">Skor ≥3: Tiga atau lebih indikator melampaui batas</span>
+                </div>
+            </div>
+            <p class="text-secondary mt-3" style="font-size: 0.78rem; line-height: 1.5;">
+                <i class="fas fa-info-circle me-1"></i>
+                Data risiko kesehatan lansia divisualisasikan berdasarkan
+                <strong>poligon batas wilayah desa</strong> dari data GeoJSON. Warna area mencerminkan persentase tingkat risiko di masing-masing desa.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

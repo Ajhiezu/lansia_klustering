@@ -1,0 +1,377 @@
+{% extends 'base.html' %}
+
+{% block title %}Simulasi Perhitungan - Analisis Risiko Kesehatan Lansia{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Simulasi Perhitungan Manual</h1>
+    <p class="page-subtitle">Penjelasan matematis langkah demi langkah dari pemrosesan algoritme dan metrik validasi</p>
+</div>
+
+<!-- Intro Banner -->
+<div class="glass-card mb-4">
+    <h4><i class="fas fa-graduation-cap text-primary me-2"></i>Tujuan Edukasi & Skripsi</h4>
+    <p class="text-secondary mb-0" style="font-size: 0.9rem; line-height: 1.6;">
+        Halaman ini dibuat khusus untuk mempermudah penyusunan bab analisis skripsi atau karya ilmiah. Mengingat perhitungan manual pada ratusan baris data sangat sulit disajikan, sistem mengambil **sampel 5 data pertama** dengan **3 variabel kesehatan utama** (<code>{{ steps.features|join(', ') }}</code>) dalam bentuk data skala normalisasi untuk mendemonstrasikan perumusan matematika.
+    </p>
+</div>
+
+<!-- Data Sample Card -->
+<div class="glass-card mb-4">
+    <h5 class="fw-bold mb-3"><i class="fas fa-database text-info me-2"></i>Sampel Data yang Digunakan (5 Lansia Pertama)</h5>
+    <div class="table-scroll-wrapper">
+        <div class="table-scroll-hint">
+            <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+        </div>
+        <div class="scroll-indicator left"></div>
+        <div class="scroll-indicator right"></div>
+        <div class="table-scroll-inner">
+            <table class="table table-bordered table-sm align-middle" style="font-size: 0.85rem;">
+                <thead>
+                    <tr class="table-dark">
+                        <th>No (i)</th>
+                        <th>Nama Lansia</th>
+                        {% for feat in steps.features %}
+                        <th>{{ feat.replace('_', ' ').upper() }} (Asli)</th>
+                        <th>{{ feat.replace('_', ' ').upper() }} (Scaled)</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pt in steps.data_points %}
+                    <tr>
+                        <td class="fw-bold">P{{ pt.id }}</td>
+                        <td>{{ pt.nama }}</td>
+                        {% for feat in steps.features %}
+                        <td>{{ pt.original_vals[feat] }}</td>
+                        <td class="text-primary">{{ pt.scaled_vals[feat] }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap Tabs -->
+<div class="glass-card">
+    <ul class="nav nav-pills mb-4 gap-2" id="calcTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active btn btn-outline-primary rounded-3" id="kmeans-tab" data-bs-toggle="tab" data-bs-target="#kmeans-content" type="button" role="tab">1. K-Means Clustering</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link btn btn-outline-primary rounded-3" id="silhouette-tab" data-bs-toggle="tab" data-bs-target="#silhouette-content" type="button" role="tab">2. Silhouette Score</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link btn btn-outline-primary rounded-3" id="dbi-tab" data-bs-toggle="tab" data-bs-target="#dbi-content" type="button" role="tab">3. Davies-Bouldin Index</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link btn btn-outline-primary rounded-3" id="ch-tab" data-bs-toggle="tab" data-bs-target="#ch-content" type="button" role="tab">4. Calinski-Harabasz</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="calcTabsContent">
+        <!-- 1. K-MEANS CONTENT -->
+        <div class="tab-pane fade show active" id="kmeans-content" role="tabpanel">
+            <h4 class="mb-3 text-info">Iterasi ke-1 Algoritme K-Means</h4>
+            <p class="text-secondary" style="font-size: 0.9rem;">
+                Rumus Jarak Euclidean antara data titik $x_i$ dan centroid $c_j$:
+                <code class="d-block my-2 p-2 bg-dark text-light rounded text-center">d(x, c) = &radic;&Sigma;(x_k - c_k)&sup2;</code>
+            </p>
+            
+            <h6 class="fw-bold mt-4 mb-2">Langkah 1: Inisialisasi Centroid Awal</h6>
+            <p class="text-secondary" style="font-size: 0.85rem;">Centroid diambil dari nilai data P1, P2, dan P3:</p>
+            <div class="table-scroll-wrapper mb-4">
+                <div class="table-scroll-hint">
+                    <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+                </div>
+                <div class="scroll-indicator left"></div>
+                <div class="scroll-indicator right"></div>
+                <div class="table-scroll-inner">
+                    <table class="table table-bordered table-sm" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr class="table-secondary">
+                                <th>Centroid</th>
+                                {% for feat in steps.features %}
+                                <th>{{ feat.replace('_', ' ').upper() }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in steps.kmeans.initial_centroids %}
+                            <tr>
+                                <td class="fw-bold">Centroid {{ c.cluster }} (C{{ c.cluster }})</td>
+                                {% for val in c.vals %}
+                                <td>{{ val }}</td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h6 class="fw-bold mt-4 mb-2">Langkah 2 & 3: Hitung Jarak & Penugasan Cluster</h6>
+            <div class="table-scroll-wrapper mb-4">
+                <div class="table-scroll-hint">
+                    <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+                </div>
+                <div class="scroll-indicator left"></div>
+                <div class="scroll-indicator right"></div>
+                <div class="table-scroll-inner">
+                    <table class="table table-bordered table-sm align-middle" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr class="table-secondary">
+                                <th>Titik</th>
+                                <th>Jarak ke C0</th>
+                                <th>Jarak ke C1</th>
+                                <th>Jarak ke C2</th>
+                                <th>Jarak Terpendek</th>
+                                <th>Cluster Ditugaskan</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pt in steps.kmeans.points %}
+                            <tr>
+                                <td class="fw-bold">P{{ pt.id }} ({{ pt.name }})</td>
+                                <td>{{ pt.dists[0] }}</td>
+                                <td>{{ pt.dists[1] }}</td>
+                                <td>{{ pt.dists[2] }}</td>
+                                <td class="text-success fw-bold">{{ pt.dists[pt.assigned_cluster] }}</td>
+                                <td><span class="badge bg-primary">Cluster {{ pt.assigned_cluster }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h6 class="fw-bold mt-4 mb-2">Langkah 4: Pembaruan Centroid Baru</h6>
+            <p class="text-secondary" style="font-size: 0.85rem;">Menghitung rata-rata koordinat dari titik anggota cluster:</p>
+            <div class="table-scroll-wrapper">
+                <div class="table-scroll-hint">
+                    <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+                </div>
+                <div class="scroll-indicator left"></div>
+                <div class="scroll-indicator right"></div>
+                <div class="table-scroll-inner">
+                    <table class="table table-bordered table-sm align-middle" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr class="table-secondary">
+                                <th>Cluster</th>
+                                <th>Anggota Terpilih</th>
+                                <th>Rumus Perhitungan</th>
+                                <th>Centroid Baru</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in steps.kmeans.updated_centroids %}
+                            <tr>
+                                <td class="fw-bold">Cluster {{ c.cluster }}</td>
+                                <td>{{ c.pts|join(', ') or 'Tidak ada' }}</td>
+                                <td><code>{{ c.calc_str }}</code></td>
+                                <td class="text-primary fw-bold">{{ c.vals|join(', ') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. SILHOUETTE CONTENT -->
+        <div class="tab-pane fade" id="silhouette-content" role="tabpanel">
+            <h4 class="mb-3 text-info">Perhitungan Silhouette Coefficient</h4>
+            <p class="text-secondary" style="font-size: 0.9rem;">
+                Rumus koefisien Silhouette untuk data ke-i:
+                <code class="d-block my-2 p-2 bg-dark text-light rounded text-center">s(i) = (b(i) - a(i)) / max(a(i), b(i))</code>
+                Keterangan: $a(i)$ = rata-rata jarak data ke anggota lain di cluster yang sama. $b(i)$ = rata-rata jarak data ke cluster tetangga terdekat.
+            </p>
+
+            <div class="table-scroll-wrapper mb-4">
+                <div class="table-scroll-hint">
+                    <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+                </div>
+                <div class="scroll-indicator left"></div>
+                <div class="scroll-indicator right"></div>
+                <div class="table-scroll-inner">
+                    <table class="table table-bordered table-sm align-middle" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr class="table-secondary">
+                                <th>Titik (i)</th>
+                                <th>Cluster</th>
+                                <th>a(i) (Intra-distance)</th>
+                                <th>b(i) (Inter-distance)</th>
+                                <th>Rumus s(i)</th>
+                                <th>s(i)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in steps.silhouette.steps %}
+                            <tr>
+                                <td class="fw-bold">P{{ s.id }} ({{ s.nama }})</td>
+                                <td>Cluster {{ s.cluster }}</td>
+                                <td>{{ s.a_i }} <br/><span class="text-secondary" style="font-size:0.7rem;">{{ s.a_i_desc }}</span></td>
+                                <td>{{ s.b_i }} <br/><span class="text-secondary" style="font-size:0.7rem;">{{ s.b_i_desc }}</span></td>
+                                <td><code style="font-size: 0.75rem;">{{ s.calc_str }}</code></td>
+                                <td class="fw-bold text-primary">{{ s.s_i }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="alert alert-success rounded-4 border-0">
+                <strong>Rata-rata Silhouette Score Sampel:</strong> {{ steps.silhouette.avg_score }}
+            </div>
+        </div>
+
+        <!-- 3. DAVIES-BOULDIN CONTENT -->
+        <div class="tab-pane fade" id="dbi-content" role="tabpanel">
+            <h4 class="mb-3 text-info">Perhitungan Davies-Bouldin Index (DBI)</h4>
+            <p class="text-secondary" style="font-size: 0.9rem;">
+                Mengevaluasi kepadatan dalam klaster ($S_i$) dan jarak antar centroid ($d(c_i, c_j)$):
+                <code class="d-block my-2 p-2 bg-dark text-light rounded text-center">R_ij = (S_i + S_j) / d(c_i, c_j)</code>
+            </p>
+
+            <h6 class="fw-bold mt-4 mb-2">Langkah 1: Kepadatan Cluster (S_i)</h6>
+            <div class="table-scroll-wrapper mb-4">
+                <div class="table-scroll-hint">
+                    <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+                </div>
+                <div class="scroll-indicator left"></div>
+                <div class="scroll-indicator right"></div>
+                <div class="table-scroll-inner">
+                    <table class="table table-bordered table-sm align-middle" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr class="table-secondary">
+                                <th>Cluster (i)</th>
+                                <th>Anggota</th>
+                                <th>Keterangan</th>
+                                <th>S_i</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for disp in steps.davies_bouldin.dispersions %}
+                            <tr>
+                                <td class="fw-bold">Cluster {{ disp.cluster }}</td>
+                                <td>{{ disp.pts|join(', ') }}</td>
+                                <td><span class="text-secondary" style="font-size:0.75rem;">{{ disp.calc_str }}</span></td>
+                                <td class="text-primary">{{ disp.s_i }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h6 class="fw-bold mt-4 mb-2">Langkah 2: Similarity Ratio (R_ij) per Pasang Cluster</h6>
+            {% for item in steps.davies_bouldin.ratios %}
+            <div class="mb-3 border rounded-4 p-3" style="background: var(--bg-secondary); border-color: var(--border-color) !important;">
+                <h6 class="fw-bold">Rasio untuk Cluster {{ item.cluster }} (Mencari Max j&ne;i):</h6>
+                <ul class="text-secondary mb-0" style="font-size: 0.85rem; padding-left: 1.25rem;">
+                    {% for other_c, r_data in item.ratios.items() %}
+                    <li>
+                        Terhadap Cluster {{ other_c }}:
+                        Jarak Centroid d(c_{{ item.cluster }}, c_{{ other_c }}) = {{ r_data.m_ij }}. 
+                        R_{{ item.cluster }},{{ other_c }} = <code>{{ r_data.formula }}</code> = <strong>{{ r_data.r_ij }}</strong>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <div class="mt-2 text-primary fw-bold" style="font-size: 0.85rem;">
+                    D_{{ item.cluster }} = max(R_{{ item.cluster }},j) = {{ item.max_ratio }}
+                </div>
+            </div>
+            {% endfor %}
+
+            <div class="alert alert-success rounded-4 border-0 mt-4">
+                <strong>Davies-Bouldin Index (DBI) = Mean(D_0, D_1, D_2) =</strong> {{ steps.davies_bouldin.dbi_score }}
+            </div>
+        </div>
+
+        <!-- 4. CALINSKI-HARABASZ CONTENT -->
+        <div class="tab-pane fade" id="ch-content" role="tabpanel">
+            <h4 class="mb-3 text-info">Perhitungan Calinski-Harabasz Score</h4>
+            <p class="text-secondary" style="font-size: 0.9rem;">
+                Menggunakan rasio jumlah kuadrat antar-klaster (SS_B) dan dalam-klaster (SS_W):
+                <code class="d-block my-2 p-2 bg-dark text-light rounded text-center">CH = (SS_B / (K - 1)) / (SS_W / (N - K))</code>
+            </p>
+
+            <h6 class="fw-bold mt-4 mb-2">Langkah 1: Centroid Global Data (Mean dari seluruh 5 sampel)</h6>
+            <div class="badge bg-primary fs-6 p-2 mb-3 rounded-3">C_global = [{{ steps.calinski_harabasz.global_centroid|join(', ') }}]</div>
+
+            <h6 class="fw-bold mb-2">Langkah 2: Hitung SS_W (Within-Cluster Sum of Squares)</h6>
+            <p class="text-secondary" style="font-size:0.85rem;">Jumlah kuadrat jarak titik-titik ke centroid masing-masing:</p>
+            <div class="table-scroll-wrapper mb-4">
+                <div class="table-scroll-hint">
+                    <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+                </div>
+                <div class="scroll-indicator left"></div>
+                <div class="scroll-indicator right"></div>
+                <div class="table-scroll-inner">
+                    <table class="table table-bordered table-sm align-middle" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr class="table-secondary">
+                                <th>Cluster</th>
+                                <th>Anggota</th>
+                                <th>Sum of Squares Cluster</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in steps.calinski_harabasz.ss_w_details %}
+                            <tr>
+                                <td class="fw-bold">Cluster {{ item.cluster }}</td>
+                                <td>{{ item.pts|join(', ') }}</td>
+                                <td>{{ item.sum_sq }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="fw-bold text-primary mb-4" style="font-size: 0.85rem;">SS_W Total = {{ steps.calinski_harabasz.ss_w }}</div>
+
+            <h6 class="fw-bold mb-2">Langkah 3: Hitung SS_B (Between-Cluster Sum of Squares)</h6>
+            <p class="text-secondary" style="font-size:0.85rem;">Jumlah kuadrat jarak tertimbang dari centroid cluster ke centroid global:</p>
+            <div class="table-scroll-wrapper mb-4">
+                <div class="table-scroll-hint">
+                    <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+                </div>
+                <div class="scroll-indicator left"></div>
+                <div class="scroll-indicator right"></div>
+                <div class="table-scroll-inner">
+                    <table class="table table-bordered table-sm align-middle" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr class="table-secondary">
+                                <th>Cluster</th>
+                                <th>Anggota (n_k)</th>
+                                <th>Jarak Centroid ke Global ^2</th>
+                                <th>n_k * Jarak^2</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in steps.calinski_harabasz.ss_b_details %}
+                            <tr>
+                                <td class="fw-bold">Cluster {{ item.cluster }}</td>
+                                <td>{{ item.count }}</td>
+                                <td>{{ item.dist_sq }}</td>
+                                <td><code>{{ item.calc_str }}</code> = {{ item.weighted_val }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="fw-bold text-primary mb-4" style="font-size: 0.85rem;">SS_B Total = {{ steps.calinski_harabasz.ss_b }}</div>
+
+            <h6 class="fw-bold mb-2">Langkah 4: Hasil Akhir Calinski-Harabasz</h6>
+            <div class="alert alert-success rounded-4 border-0">
+                <strong>Pembagian:</strong> <code>{{ steps.calinski_harabasz.formula }}</code><br/>
+                <strong>Calinski-Harabasz Score Sampel =</strong> {{ steps.calinski_harabasz.ch_score }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

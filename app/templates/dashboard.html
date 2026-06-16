@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Analisis Risiko Kesehatan Lansia{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-4">
+    <div class="col-md-8">
+        <h1 class="page-title">Beranda Dashboard</h1>
+        <p class="page-subtitle">Sistem Analisis Risiko Kesehatan Lansia Berbasis Clustering K-Means & GIS Puskesmas Tempeh</p>
+    </div>
+    {% if has_data %}
+    <div class="col-md-4 text-md-end">
+        <div class="badge bg-dark-subtle text-dark border p-2 rounded-3">
+            <i class="fas fa-file-excel text-success me-2"></i>Aktif: {{ filename }}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if not has_data %}
+<!-- HERO WELCOME SECTION (NO DATA) -->
+<div class="glass-card text-center py-5 d-flex flex-column align-items-center gap-4">
+    <div class="icon-box p-4 bg-info-subtle text-info rounded-circle mb-2" style="width: 100px; height: 100px; display: flex; align-items: center; justify-content: center;">
+        <i class="fas fa-hand-holding-heart fa-4x"></i>
+    </div>
+    <h2 class="fw-bold" style="font-family: 'Outfit', sans-serif;">Selamat Datang di Sistem Analisis Lansia</h2>
+    <p class="text-secondary max-w-lg" style="max-width: 600px; line-height: 1.6;">
+        Aplikasi ini dirancang untuk menganalisis risiko kesehatan lansia di wilayah kerja Puskesmas Tempeh, Lumajang secara otomatis menggunakan algoritme <strong>K-Means Clustering</strong> dan memetakan persebarannya berbasis <strong>Sistem Informasi Geografis (GIS)</strong>.
+    </p>
+    <div>
+        <a href="{{ url_for('upload.index') }}" class="btn-primary text-decoration-none">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Mulai Unggah Dataset</span>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mt-2">
+    <div class="col-md-4">
+        <div class="glass-card h-100 d-flex flex-column gap-2">
+            <h4 class="text-info"><i class="fas fa-filter me-2"></i>1. Preprocessing Cerdas</h4>
+            <p class="text-secondary" style="font-size: 0.9rem;">Pembersihan otomatis data multi-header, merged-cells, format rekam medis tidak standar, penanganan nilai hilang, dan deteksi outlier otomatis.</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-card h-100 d-flex flex-column gap-2">
+            <h4 class="text-primary"><i class="fas fa-cogs me-2"></i>2. Algoritme K-Means</h4>
+            <p class="text-secondary" style="font-size: 0.9rem;">Clustering otomatis berdasarkan 18 indikator kesehatan dengan penentuan jumlah klaster optimal menggunakan Elbow Method, Silhouette Score, dan Davies-Bouldin Index.</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-card h-100 d-flex flex-column gap-2">
+            <h4 class="text-warning"><i class="fas fa-map-marked-alt"></i> 3. Pemetaan GIS</h4>
+            <p class="text-secondary" style="font-size: 0.9rem;">Visualisasi titik persebaran wilayah kerawanan penyakit lansia per desa di Kecamatan Tempeh, lengkap dengan sebaran spasial interaktif.</p>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- DASHBOARD STATS (DATA ACTIVE) -->
+<div class="row g-4 mb-4">
+    <!-- Stat 1 -->
+    <div class="col-md-4">
+        <div class="glass-card d-flex align-items-center gap-3">
+            <div class="p-3 bg-primary-subtle text-primary rounded-4">
+                <i class="fas fa-users fa-2x"></i>
+            </div>
+            <div>
+                <div class="text-secondary" style="font-size: 0.85rem; font-weight: 500;">Total Lansia</div>
+                <h3 class="mb-0 fw-bold">{{ total_rows }} Jiwa</h3>
+            </div>
+        </div>
+    </div>
+    <!-- Stat 2 -->
+    <div class="col-md-4">
+        <div class="glass-card d-flex align-items-center gap-3">
+            <div class="p-3 bg-info-subtle text-info rounded-4">
+                <i class="fas fa-chart-pie fa-2x"></i>
+            </div>
+            <div>
+                <div class="text-secondary" style="font-size: 0.85rem; font-weight: 500;">Jumlah Cluster (K)</div>
+                <h3 class="mb-0 fw-bold">{{ n_clusters }} Klaster</h3>
+            </div>
+        </div>
+    </div>
+    <!-- Stat 3 -->
+    <div class="col-md-4">
+        <div class="glass-card d-flex align-items-center gap-3">
+            <div class="p-3 bg-success-subtle text-success rounded-4">
+                <i class="fas fa-check-circle fa-2x"></i>
+            </div>
+            <div>
+                <div class="text-secondary" style="font-size: 0.85rem; font-weight: 500;">Silhouette Score</div>
+                <h3 class="mb-0 fw-bold">{{ metrics.silhouette_score|format_value }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- Chart 1: Cluster Distribution -->
+    <div class="col-md-6">
+        <div class="glass-card h-100">
+            <h4 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Distribusi Anggota Per Cluster</h4>
+            <div id="dist-chart" style="height: 300px;"></div>
+        </div>
+    </div>
+    <!-- Chart 2: Desa Distribution -->
+    <div class="col-md-6">
+        <div class="glass-card h-100">
+            <h4 class="mb-3"><i class="fas fa-map-marker-alt me-2"></i>Distribusi Lansia Per Desa</h4>
+            <div id="desa-chart" style="height: 300px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="glass-card">
+    <h4 class="mb-3"><i class="fas fa-clipboard-list me-2"></i>Karakteristik Umum Cluster</h4>
+    <div class="table-scroll-wrapper">
+        <div class="table-scroll-hint">
+            <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+        </div>
+        <div class="scroll-indicator left"></div>
+        <div class="scroll-indicator right"></div>
+        <div class="table-scroll-inner">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Cluster</th>
+                        <th>Jumlah Anggota</th>
+                        <th>Rata-rata Umur</th>
+                        <th>Rata-rata IMT</th>
+                        <th>Rata-rata Tekanan Darah</th>
+                        <th>Rata-rata Gula Darah</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c_id, count in clus_summary.cluster_dist.items() %}
+                    <tr>
+                        <td><strong class="text-info">Cluster {{ c_id }}</strong></td>
+                        <td>{{ count }} Lansia</td>
+                        <td>{{ clus_summary.cluster_means[c_id]['umur']|format_value }} th</td>
+                        <td>{{ clus_summary.cluster_means[c_id]['imt']|format_value }}</td>
+                        <td>
+                            {{ clus_summary.cluster_means[c_id]['sistol']|int }}/{{ clus_summary.cluster_means[c_id]['diastol']|int }} mmHg
+                        </td>
+                        <td>{{ clus_summary.cluster_means[c_id]['gula_darah']|format_value }} mg/dL</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if has_data %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const theme = document.documentElement.getAttribute('data-theme') || 'light';
+        const chartBg = theme === 'dark' ? '#111827' : '#ffffff';
+        const chartText = theme === 'dark' ? '#f3f4f6' : '#1f2937';
+        const gridColor = theme === 'dark' ? '#374151' : '#e5e7eb';
+
+        // 1. Data Distribusi Cluster
+        const distData = [{
+            x: [{% for c_id in clus_summary.cluster_dist.keys() %}'Cluster {{ c_id }}',{% endfor %}],
+            y: [{% for count in clus_summary.cluster_dist.values() %}{{ count }},{% endfor %}],
+            type: 'bar',
+            marker: {
+                color: ['#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6'],
+                opacity: 0.8
+            }
+        }];
+
+        const distLayout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: chartText },
+            margin: { t: 20, b: 40, l: 40, r: 20 },
+            xaxis: { gridcolor: gridColor },
+            yaxis: { gridcolor: gridColor }
+        };
+
+        Plotly.newPlot('dist-chart', distData, distLayout, {responsive: true, displayModeBar: false});
+
+        // 2. Data Distribusi Desa
+        const desaData = [{
+            x: [{% for desa in pre_summary.desa_counts.keys() %}'{{ desa }}',{% endfor %}],
+            y: [{% for count in pre_summary.desa_counts.values() %}{{ count }},{% endfor %}],
+            type: 'bar',
+            marker: {
+                color: '#06b6d4',
+                opacity: 0.85
+            }
+        }];
+
+        const desaLayout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: chartText },
+            margin: { t: 20, b: 60, l: 40, r: 20 },
+            xaxis: { gridcolor: gridColor, tickangle: -25 },
+            yaxis: { gridcolor: gridColor }
+        };
+
+        Plotly.newPlot('desa-chart', desaData, desaLayout, {responsive: true, displayModeBar: false});
+
+        // Handle Theme Changes dynamically
+        window.addEventListener('themeChanged', () => {
+            const newTheme = document.documentElement.getAttribute('data-theme');
+            const newTextColor = newTheme === 'dark' ? '#f3f4f6' : '#1f2937';
+            const newGridColor = newTheme === 'dark' ? '#374151' : '#e5e7eb';
+            
+            const update = {
+                font: { color: newTextColor },
+                xaxis: { gridcolor: newGridColor, tickangle: -25 },
+                yaxis: { gridcolor: newGridColor }
+            };
+            
+            Plotly.relayout('dist-chart', update);
+            Plotly.relayout('desa-chart', update);
+        });
+    });
+</script>
+{% endif %}
+{% endblock %}

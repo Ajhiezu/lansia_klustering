@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Ekspor Laporan - Analisis Risiko Kesehatan Lansia{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Unduh Laporan Analisis</h1>
+    <p class="page-subtitle">Ekspor ringkasan eksekutif hasil clustering lansia Puskesmas Tempeh</p>
+</div>
+
+<div class="row g-4">
+    <!-- Card PDF Export -->
+    <div class="col-md-6">
+        <div class="glass-card h-100 d-flex flex-column justify-content-between gap-4">
+            <div>
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="p-3 bg-danger-subtle text-danger rounded-4">
+                        <i class="fas fa-file-pdf fa-2x"></i>
+                    </div>
+                    <div>
+                        <h4 class="mb-0 fw-bold">Laporan Ringkasan PDF</h4>
+                        <span class="text-secondary" style="font-size: 0.85rem;">Siap Cetak / Print-Ready</span>
+                    </div>
+                </div>
+                <p class="text-secondary" style="font-size: 0.9rem; line-height: 1.6;">
+                    Laporan PDF diformat secara formal dan premium. Berisi ringkasan eksekutif parameter uji metrik evaluasi (Silhouette, Davies-Bouldin, Calinski-Harabasz), tabel rata-rata nilai kesehatan asli per cluster, matriks sebaran lansia per desa, dan kesimpulan tingkat risiko kerawanan.
+                </p>
+            </div>
+            
+            <div class="d-grid mt-auto">
+                <a href="{{ url_for('reports.download', file_type='pdf') }}" class="btn btn-danger rounded-3 p-2 fw-bold text-decoration-none text-center">
+                    <i class="fas fa-download me-2"></i> Unduh Laporan PDF
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Excel Export -->
+    <div class="col-md-6">
+        <div class="glass-card h-100 d-flex flex-column justify-content-between gap-4">
+            <div>
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="p-3 bg-success-subtle text-success rounded-4">
+                        <i class="fas fa-file-excel fa-2x"></i>
+                    </div>
+                    <div>
+                        <h4 class="mb-0 fw-bold">Dataset Hasil Excel</h4>
+                        <span class="text-secondary" style="font-size: 0.85rem;">Format Spreadsheet (.xlsx)</span>
+                    </div>
+                </div>
+                <p class="text-secondary" style="font-size: 0.9rem; line-height: 1.6;">
+                    Spreasheet Excel memuat hasil analisis lengkap yang dibagi ke dalam 3 lembar kerja (Sheets). Sheet pertama berisi data demografis & klinis lengkap seluruh lansia berserta label cluster yang ditugaskan. Sheet kedua berisi nilai koordinat centroid klaster. Sheet ketiga merekam metrik evaluasi klaster.
+                </p>
+            </div>
+            
+            <div class="d-grid mt-auto">
+                <a href="{{ url_for('reports.download', file_type='excel') }}" class="btn btn-success rounded-3 p-2 fw-bold text-decoration-none text-center">
+                    <i class="fas fa-download me-2"></i> Unduh Spreadsheet Excel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Extra Notice -->
+<div class="glass-card mt-4 border-start border-4 border-warning">
+    <h5 class="fw-bold"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Catatan Pengarsipan</h5>
+    <p class="text-secondary mb-0" style="font-size: 0.85rem; line-height: 1.5;">
+        Laporan yang dihasilkan di atas disesuaikan secara dinamis berdasarkan parameter analisis aktif. Jika Anda mengubah jumlah cluster (K) pada menu "Hasil Clustering", maka metrik evaluasi dan kesimpulan risiko pada file unduhan PDF/Excel akan otomatis terupdate menyelaraskan parameter terbaru tersebut.
+    </p>
+</div>
+{% endblock %}

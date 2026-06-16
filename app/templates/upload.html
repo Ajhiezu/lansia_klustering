@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+
+{% block title %}Unggah Data - Analisis Risiko Kesehatan Lansia{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Unggah Dataset</h1>
+    <p class="page-subtitle">Pilih file spreadsheet Excel (.xlsx) data lansia Puskesmas Tempeh untuk dianalisis</p>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Upload Form -->
+    <div class="col-md-7">
+        <div class="glass-card">
+            <h4 class="mb-3"><i class="fas fa-file-excel text-success me-2"></i>Form Pengunggahan File</h4>
+            
+            <form id="upload-form" action="{{ url_for('upload.index') }}" method="POST" enctype="multipart/form-data" data-loading-message="Sedang mengunggah dan menganalisis dataset. Mohon tunggu...">
+                <!-- Drag & Drop Zone -->
+                <div id="drop-zone" class="border border-2 border-dashed rounded-4 p-5 text-center mb-4 transition-all" style="cursor: pointer; border-color: var(--border-color) !important; background: var(--bg-secondary);">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-secondary mb-3"></i>
+                    <h5 class="fw-bold">Tarik & Lepas File di Sini</h5>
+                    <p class="text-secondary mb-3" style="font-size: 0.9rem;">Atau klik tombol di bawah untuk memilih file dari komputer Anda.</p>
+                    <button id="file-select-btn" class="btn btn-outline-primary btn-sm rounded-3">Pilih File</button>
+                    <input type="file" id="file-input" name="file" accept=".xlsx, .csv" style="display: none;">
+                </div>
+                
+                <!-- Selected File Info -->
+                <div id="file-info" class="alert alert-info rounded-4 border-0 mb-4" style="display: none;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <i class="fas fa-file-excel me-2"></i>
+                            <span id="selected-file-name" class="fw-bold">filename.xlsx</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Submit -->
+                <div class="d-grid">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-play-circle"></i>
+                        <span>Proses dan Jalankan Pipeline</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Right Column: Guidelines -->
+    <div class="col-md-5">
+        <div class="glass-card h-100 d-flex flex-column gap-3">
+            <h4><i class="fas fa-info-circle text-info me-2"></i>Petunjuk Format Data</h4>
+            <p class="text-secondary" style="font-size: 0.9rem; line-height: 1.6;">
+                Untuk memastikan pipeline preprocessing berjalan tanpa hambatan, file Excel Anda sebaiknya memenuhi ketentuan berikut:
+            </p>
+            
+            <ul class="text-secondary d-flex flex-column gap-2" style="font-size: 0.85rem; padding-left: 1.25rem;">
+                <li>Setiap <strong>Sheet</strong> merepresentasikan satu wilayah Desa (nama sheet akan otomatis digunakan sebagai nama desa).</li>
+                <li>Format baris header di setiap sheet dapat bertingkat (multi-header), asalkan kolom-kolom utama seperti <strong>Nama, Umur, Jenis Kelamin, BB, TB/IMT, TD, Gula Darah, Kolesterol</strong> teridentifikasi.</li>
+                <li>Kolom umur dapat dikelompokkan (misal kolom "45-59 L", "45-59 P"), sistem akan mengekstraksi dan menyatukannya secara otomatis.</li>
+                <li>Data yang tidak valid (misal baris TOTAL atau baris kosong) akan dibuang secara otomatis selama proses parsing.</li>
+            </ul>
+            
+            <div class="mt-auto pt-3 border-top" style="border-color: var(--border-color) !important;">
+                <p class="text-secondary mb-2" style="font-size: 0.8rem;">Contoh file yang didukung:</p>
+                <div class="badge bg-secondary-subtle text-secondary p-2 rounded-3">
+                    <i class="fas fa-file-excel me-1 text-success"></i> data_januari.xlsx
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if has_active_data %}
+<!-- PREVIEW ACTIVE DATA -->
+<div class="glass-card mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h4 class="mb-1"><i class="fas fa-database text-primary me-2"></i>Dataset Aktif dalam Sesi</h4>
+            <p class="text-secondary mb-0" style="font-size: 0.85rem;">Menampilkan 10 baris pertama dari file mentah yang sedang aktif ({{ filename }})</p>
+        </div>
+        <form action="{{ url_for('upload.clear_data') }}" method="POST" data-loading-message="Membersihkan data sesi...">
+            <button type="submit" class="btn btn-outline-danger btn-sm rounded-3">
+                <i class="fas fa-trash-alt me-1"></i> Bersihkan Data
+            </button>
+        </form>
+    </div>
+    
+    <div class="table-scroll-wrapper">
+        <div class="table-scroll-hint">
+            <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+        </div>
+        <div class="scroll-indicator left"></div>
+        <div class="scroll-indicator right"></div>
+        <div class="table-scroll-inner" style="max-height: 400px;">
+            {{ raw_preview_html|safe }}
+        </div>
+    </div>
+</div>
+{% if history %}
+<!-- HISTORI ANALISIS BERKAS -->
+<div class="glass-card mt-4">
+    <h4 class="mb-3"><i class="fas fa-history text-warning me-2"></i>Histori Analisis Berkas</h4>
+    <p class="text-secondary" style="font-size: 0.85rem;">Daftar berkas yang pernah diunggah dan dianalisis selama sesi ini aktif:</p>
+    
+    <div class="table-scroll-wrapper">
+        <div class="table-scroll-hint">
+            <i class="fas fa-arrows-alt-h"></i> Geser horizontal untuk melihat kolom lainnya
+        </div>
+        <div class="scroll-indicator left"></div>
+        <div class="scroll-indicator right"></div>
+        <div class="table-scroll-inner">
+            <table class="table table-hover table-striped align-middle" style="font-size: 0.9rem;">
+                <thead>
+                    <tr>
+                        <th>Waktu Unggah</th>
+                        <th>Nama Berkas</th>
+                        <th>Jumlah Data</th>
+                        <th>Cluster (K)</th>
+                        <th>Silhouette Score</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in history %}
+                    <tr class="{% if item.filename == filename %}table-info{% endif %}">
+                        <td>{{ item.timestamp }}</td>
+                        <td>
+                            <strong class="text-primary">{{ item.filename }}</strong>
+                            {% if item.filename == filename %}
+                            <span class="badge bg-success ms-2">Aktif</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.total_rows }} Lansia</td>
+                        <td>K = {{ item.n_clusters }}</td>
+                        <td>{{ item.silhouette_score|format_value }}</td>
+                        <td>
+                            {% if item.filename != filename %}
+                            <a href="{{ url_for('upload.reload_file', filename=item.filename) }}" class="btn btn-sm btn-outline-primary rounded-3">
+                                <i class="fas fa-sync-alt me-1"></i> Muat Ulang
+                            </a>
+                            {% else %}
+                            <span class="text-muted" style="font-size: 0.85rem;"><i class="fas fa-check-circle text-success me-1"></i>Sedang Aktif</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

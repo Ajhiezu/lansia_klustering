@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Halaman Tidak Ditemukan - 404{% endblock %}
+
+{% block content %}
+<div class="glass-card text-center py-5 d-flex flex-column align-items-center gap-3">
+    <div class="text-danger mb-2">
+        <i class="fas fa-exclamation-triangle fa-5x"></i>
+    </div>
+    <h1 class="fw-bold">404</h1>
+    <h3 class="fw-semibold">Halaman Tidak Ditemukan</h3>
+    <p class="text-secondary" style="max-width: 500px;">
+        Maaf, halaman yang Anda cari tidak ditemukan atau telah dipindahkan ke alamat lain.
+    </p>
+    <a href="{{ url_for('dashboard.index') }}" class="btn-primary text-decoration-none mt-3">
+        <i class="fas fa-home"></i>
+        <span>Kembali ke Beranda</span>
+    </a>
+</div>
+{% endblock %}

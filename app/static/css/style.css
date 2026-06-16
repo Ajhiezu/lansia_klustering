@@ -1,0 +1,599 @@
+/*
+style.css - Premium Glassmorphism & Adaptive Dark/Light Mode Theme
+Uses Inter and Outfit Google Fonts for high-end typography
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+    /* Color Palette - Light Mode */
+    --bg-primary: #f8fafc;
+    --bg-secondary: #f1f5f9;
+    --bg-sidebar: #0f172a;
+    --bg-card: rgba(255, 255, 255, 0.8);
+    --border-color: rgba(226, 232, 240, 0.8);
+    
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-light: #94a3b8;
+    
+    --accent-primary: #06b6d4;      /* Teal */
+    --accent-primary-hover: #0891b2;
+    --accent-secondary: #8b5cf6;    /* Violet */
+    
+    /* Risk Levels (Solid curated colors) */
+    --risk-high: #ef4444;           /* Red */
+    --risk-medium: #f97316;         /* Orange */
+    --risk-low: #22c55e;            /* Green */
+    
+    /* Shadows & Effects */
+    --card-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 10px -1px rgba(15, 23, 42, 0.03);
+    --sidebar-width: 280px;
+    --transition-speed: 0.3s;
+}
+
+[data-theme="dark"] {
+    /* Color Palette - Dark Mode */
+    --bg-primary: #0b0f19;
+    --bg-secondary: #111827;
+    --bg-sidebar: #070a13;
+    --bg-card: rgba(17, 24, 39, 0.7);
+    --border-color: rgba(31, 41, 55, 0.6);
+    
+    --text-primary: #f9fafb;
+    --text-secondary: #9ca3af;
+    --text-light: #6b7280;
+    
+    --accent-primary: #22d3ee;      /* Teal */
+    --accent-primary-hover: #06b6d4;
+    --accent-secondary: #a78bfa;    /* Violet */
+    
+    --risk-high: #f87171;
+    --risk-medium: #fb923c;
+    --risk-low: #4ade80;
+    
+    --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3), 0 2px 10px -1px rgba(0, 0, 0, 0.2);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    overflow-x: hidden;
+    transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
+}
+
+/* --- Layout --- */
+.sidebar-container {
+    width: var(--sidebar-width);
+    background-color: var(--bg-sidebar);
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 4px 0 25px rgba(0, 0, 0, 0.15);
+    transition: var(--transition-speed) ease;
+}
+
+.main-content {
+    margin-left: var(--sidebar-width);
+    flex-grow: 1;
+    min-height: 100vh;
+    padding: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    transition: var(--transition-speed) ease;
+    /* ── Fix: constrain width so tables overflow inside their scroll containers ── */
+    width: calc(100% - var(--sidebar-width));
+    max-width: calc(100vw - var(--sidebar-width));
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+/* --- Sidebar --- */
+.sidebar-header {
+    padding: 2rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logo-text {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.sublogo-text {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 4px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.sidebar-menu {
+    list-style: none;
+    padding: 1.5rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+.menu-item-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    color: #94a3b8;
+    text-decoration: none;
+    border-radius: 12px;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.menu-item-link:hover, .menu-item-link.active {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.menu-item-link.active {
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+    border-left: 4px solid var(--accent-primary);
+}
+
+.menu-item-link i {
+    font-size: 1.2rem;
+    width: 20px;
+    text-align: center;
+}
+
+.sidebar-footer {
+    padding: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* --- Theme Toggle & Info --- */
+.theme-switch-btn {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    padding: 0.75rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.theme-switch-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* --- Glassmorphism Cards --- */
+.glass-card {
+    background-color: var(--bg-card);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: var(--card-shadow);
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color var(--transition-speed) ease;
+    /* ── Fix: prevent card from stretching beyond parent ── */
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.glass-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.08);
+}
+
+/* --- Typography & Buttons --- */
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.page-title {
+    font-size: 2.2rem;
+    background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-primary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+.page-subtitle {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 400;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+    color: #ffffff;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.25);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(6, 182, 212, 0.35);
+    filter: brightness(1.05);
+}
+
+/* --- Badges & Indicators --- */
+.badge-risk {
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+}
+
+.badge-risk-high {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: var(--risk-high);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.badge-risk-medium {
+    background-color: rgba(249, 115, 22, 0.15);
+    color: var(--risk-medium);
+    border: 1px solid rgba(249, 115, 22, 0.2);
+}
+
+.badge-risk-low {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: var(--risk-low);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+/* --- Tables Styling --- */
+.table-responsive {
+    overflow-x: auto !important;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-top: 1rem;
+    display: block;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-primary) var(--bg-secondary);
+}
+
+.table-responsive::-webkit-scrollbar {
+    height: 10px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border-radius: 8px;
+    border: 2px solid var(--bg-secondary);
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, var(--accent-primary-hover), var(--accent-secondary));
+}
+
+/* Global flex overflow fix: prevent any flex child from stretching beyond parent */
+.main-content > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.main-content .row {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.main-content .row > [class*="col"] {
+    min-width: 0;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.table th {
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 1rem;
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s;
+    white-space: nowrap;
+}
+
+.table tbody tr:hover td {
+    background-color: var(--bg-secondary);
+}
+
+/* ── Scrollable Table Wrapper ── */
+.table-scroll-wrapper {
+    position: relative;
+    width: 100%;
+    margin-top: 1rem;
+}
+
+.table-scroll-wrapper .table-scroll-inner {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 75vh;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+}
+
+/* Sticky header inside scroll wrapper */
+.table-scroll-wrapper .table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--bg-secondary);
+    box-shadow: inset 0 -2px 0 var(--border-color);
+}
+
+[data-theme="dark"] .table-scroll-wrapper .table thead th {
+    background-color: #1a2236;
+}
+
+/* ── Custom Scrollbar (Webkit) ── */
+.table-scroll-inner::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+}
+
+.table-scroll-inner::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin: 2px;
+}
+
+.table-scroll-inner::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border-radius: 8px;
+    border: 2px solid var(--bg-secondary);
+    transition: background 0.3s;
+}
+
+.table-scroll-inner::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, var(--accent-primary-hover), var(--accent-secondary));
+}
+
+.table-scroll-inner::-webkit-scrollbar-corner {
+    background: var(--bg-secondary);
+}
+
+/* Firefox scrollbar */
+.table-scroll-inner {
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-primary) var(--bg-secondary);
+}
+
+/* ── Scroll Indicators (gradient edge fades) ── */
+.table-scroll-wrapper .scroll-indicator {
+    position: absolute;
+    top: 0;
+    bottom: 10px; /* avoid covering scrollbar */
+    width: 40px;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.table-scroll-wrapper .scroll-indicator.left {
+    left: 0;
+    background: linear-gradient(to right, var(--bg-card), transparent);
+    border-radius: 20px 0 0 20px;
+}
+
+.table-scroll-wrapper .scroll-indicator.right {
+    right: 0;
+    background: linear-gradient(to left, var(--bg-card), transparent);
+    border-radius: 0 20px 20px 0;
+}
+
+.table-scroll-wrapper .scroll-indicator.visible {
+    opacity: 1;
+}
+
+/* ── Scroll Hint Badge ── */
+.table-scroll-hint {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--text-light);
+    padding: 4px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    margin-bottom: 8px;
+    width: fit-content;
+    animation: hint-pulse 2s ease-in-out infinite;
+}
+
+.table-scroll-hint.visible {
+    display: inline-flex;
+}
+
+.table-scroll-hint i {
+    font-size: 0.85rem;
+    color: var(--accent-primary);
+}
+
+@keyframes hint-pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+/* ── DataTables overrides inside scroll wrapper ── */
+.table-scroll-wrapper .dataTables_wrapper .dataTables_scrollBody {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll-wrapper .dataTables_wrapper .dataTables_scrollHead {
+    overflow: visible !important;
+}
+
+/* DataTables info/pagination row fix */
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+    padding-top: 0.75rem;
+}
+
+/* ── Responsive table adjustments ── */
+@media (max-width: 768px) {
+    .table-scroll-inner {
+        max-height: 60vh;
+    }
+
+    .table th, .table td {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .table-scroll-hint {
+        font-size: 0.7rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .table-scroll-inner {
+        max-height: 50vh;
+    }
+
+    .table th, .table td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.75rem;
+    }
+}
+
+/* --- Loader & Transitions --- */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 1.5rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.loading-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.spinner {
+    width: 60px;
+    height: 60px;
+    border: 5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--accent-primary);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-text {
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 1.1rem;
+    font-family: 'Outfit', sans-serif;
+}
+
+/* --- Collapsible Sidebar --- */
+body.sidebar-collapsed .sidebar-container {
+    left: calc(-1 * var(--sidebar-width));
+}
+
+body.sidebar-collapsed .main-content {
+    margin-left: 0;
+    width: 100%;
+    max-width: 100vw;
+}
+
+/* Adjustments on responsive/mobile views */
+@media (max-width: 992px) {
+    .sidebar-container {
+        left: calc(-1 * var(--sidebar-width));
+    }
+    
+    .main-content {
+        margin-left: 0;
+        padding: 1.5rem;
+        width: 100%;
+        max-width: 100vw;
+    }
+    
+    body.sidebar-open .sidebar-container {
+        left: 0;
+    }
+}
