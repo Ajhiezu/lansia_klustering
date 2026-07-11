@@ -281,7 +281,7 @@ SQLALCHEMY_DATABASE_URI=mysql+pymysql://root:@localhost:3306/puskesmas_tempeh?ch
 ### Langkah 5: Buat Database MySQL
 Pastikan MySQL sudah berjalan (Laragon/XAMPP aktif), lalu buat database melalui command line atau phpMyAdmin:
 ```sql
-CREATE DATABASE puskesmas_tempeh CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE puskesmas_maesan CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 > Tabel-tabel akan dibuat secara otomatis saat aplikasi pertama kali dijalankan.
 
