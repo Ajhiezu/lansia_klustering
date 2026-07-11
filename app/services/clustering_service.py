@@ -79,8 +79,16 @@ def get_clustering_summary() -> dict:
     centroids_data = session_data.df_centroids.round(4).to_dict(orient="index")
 
     # Rata-rata fitur per cluster (unscaled)
-    key_feats = ["umur", "imt", "sistol", "diastol",
-                 "hb", "kolesterol", "gula_darah", "asam_urat"]
+    key_feats = ["umur", "imt", "kolesterol", "gds_1"]
+    # Dynamically detect blood pressure column names
+    for col_name in ["sistolik", "sistol"]:
+        if col_name in df.columns:
+            key_feats.append(col_name)
+            break
+    for col_name in ["diastolik", "diastol"]:
+        if col_name in df.columns:
+            key_feats.append(col_name)
+            break
     key_feats = [f for f in key_feats if f in df.columns]
     cluster_means = df.groupby("cluster")[key_feats].mean().round(2).to_dict(orient="index")
 

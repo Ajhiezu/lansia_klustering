@@ -52,7 +52,7 @@ class NumberedCanvas(canvas.Canvas):
         
         # Header (on pages after the first page)
         if self._pageNumber > 1:
-            self.drawString(54, 750, "Laporan Analisis Risiko Kesehatan Lansia — Puskesmas Tempeh")
+            self.drawString(54, 750, "Laporan Analisis Risiko Kesehatan Lansia — Puskesmas Maesan")
             self.setStrokeColor(colors.HexColor("#cbd5e1"))
             self.setLineWidth(0.5)
             self.line(54, 742, 558, 742)
@@ -232,7 +232,7 @@ def export_pdf() -> io.BytesIO:
     # ─── HEADER / COVER ───
     story.append(Paragraph("LAPORAN HASIL CLUSTERING K-MEANS", title_style))
     story.append(Paragraph(
-        f"Analisis Risiko Kesehatan Lansia Berbasis Wilayah • Puskesmas Tempeh<br/>"
+        f"Analisis Risiko Kesehatan Lansia Berbasis Wilayah • Puskesmas Maesan<br/>"
         f"Tanggal Analisis: {datetime.now().strftime('%d %B %Y')} | Dataset: {session_data.filename}",
         subtitle_style
     ))

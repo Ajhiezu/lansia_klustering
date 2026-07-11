@@ -5,7 +5,7 @@
 {% block content %}
 <div class="mb-4">
     <h1 class="page-title">Peta Spasial GIS Wilayah Lansia</h1>
-    <p class="page-subtitle">Distribusi geografis dan tingkat risiko kesehatan lansia Puskesmas Tempeh Lumajang per desa</p>
+    <p class="page-subtitle">Distribusi geografis dan tingkat risiko kesehatan lansia Puskesmas Maesan Bondowoso per desa</p>
 </div>
 
 <!-- KPI Cards -->
@@ -127,25 +127,27 @@
                 <li><strong>Layer Control (kanan atas peta):</strong> Aktifkan/nonaktifkan layer peta atau beralih ke citra satelit.</li>
             </ul>
             <hr style="border-color: var(--border-color);">
-            <h6 class="mb-2" style="font-size: 0.85rem;">Kriteria Tingkat Risiko:</h6>
+            <h6 class="mb-2" style="font-size: 0.85rem;">Kriteria Tingkat Risiko (Berbasis Cluster):</h6>
             <div style="font-size: 0.8rem;" class="d-flex flex-column gap-2">
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge" style="background:#10b981; font-size: 0.75rem;">Sehat</span>
-                    <span class="text-secondary">Skor 0: TD normal, IMT normal, GD normal</span>
+                    <span class="text-secondary">Cluster dengan skor risiko komposit terendah (relatif paling sehat)</span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge" style="background:#f59e0b; font-size: 0.75rem;">Sedang</span>
-                    <span class="text-secondary">Skor 1–2: Salah satu atau dua indikator melampaui batas</span>
+                    <span class="text-secondary">Cluster dengan skor risiko komposit menengah</span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-danger" style="font-size: 0.75rem;">Tinggi</span>
-                    <span class="text-secondary">Skor ≥3: Tiga atau lebih indikator melampaui batas</span>
+                    <span class="text-secondary">Cluster dengan skor risiko komposit tertinggi</span>
                 </div>
             </div>
             <p class="text-secondary mt-3" style="font-size: 0.78rem; line-height: 1.5;">
                 <i class="fas fa-info-circle me-1"></i>
-                Data risiko kesehatan lansia divisualisasikan berdasarkan
-                <strong>poligon batas wilayah desa</strong> dari data GeoJSON. Warna area mencerminkan persentase tingkat risiko di masing-masing desa.
+                Tingkat risiko ditentukan berdasarkan <strong>hasil K-Means Clustering</strong>.
+                Setiap cluster diberi label risiko secara relatif berdasarkan rata-rata
+                indikator kesehatan (umur, IMT, tekanan darah, gula darah, kolesterol)
+                dibandingkan antar cluster.
             </p>
         </div>
     </div>

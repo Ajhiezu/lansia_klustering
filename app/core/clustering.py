@@ -178,34 +178,34 @@ def _compute_cluster_risk_score(row: pd.Series) -> float:
             score += 0.5
 
     # Tekanan Darah Sistolik
-    if "sistol" in row:
-        if row["sistol"] >= 160:
+    if "sistolik" in row:
+        if row["sistolik"] >= 160:
             score += 3.0
-        elif row["sistol"] >= 140:
+        elif row["sistolik"] >= 140:
             score += 2.0
-        elif row["sistol"] >= 130:
+        elif row["sistolik"] >= 130:
             score += 1.0
-        elif row["sistol"] >= 120:
+        elif row["sistolik"] >= 120:
             score += 0.5
 
     # Tekanan Darah Diastolik
-    if "diastol" in row:
-        if row["diastol"] >= 100:
+    if "diastolik" in row:
+        if row["diastolik"] >= 100:
             score += 2.0
-        elif row["diastol"] >= 90:
+        elif row["diastolik"] >= 90:
             score += 1.5
-        elif row["diastol"] >= 80:
+        elif row["diastolik"] >= 80:
             score += 0.5
 
-    # Gula Darah
-    if "gula_darah" in row:
-        if row["gula_darah"] >= 200:
+    # Gula Darah Sewaktu (GDS 1)
+    if "gds_1" in row:
+        if row["gds_1"] >= 200:
             score += 3.0
-        elif row["gula_darah"] >= 140:
+        elif row["gds_1"] >= 140:
             score += 2.0
-        elif row["gula_darah"] >= 126:
+        elif row["gds_1"] >= 126:
             score += 1.0
-        elif row["gula_darah"] >= 100:
+        elif row["gds_1"] >= 100:
             score += 0.5
 
     # Kolesterol
@@ -215,13 +215,6 @@ def _compute_cluster_risk_score(row: pd.Series) -> float:
         elif row["kolesterol"] >= 200:
             score += 1.0
         elif row["kolesterol"] >= 180:
-            score += 0.3
-
-    # Asam Urat
-    if "asam_urat" in row:
-        if row["asam_urat"] >= 7.0:
-            score += 1.0
-        elif row["asam_urat"] >= 6.0:
             score += 0.3
 
     return round(score, 3)
@@ -264,8 +257,8 @@ def interpret_clusters(df: pd.DataFrame, features: list) -> str:
     lines.append("INTERPRETASI CLUSTER")
     lines.append("=" * 60)
 
-    key_feats = ["umur", "imt", "sistol", "diastol", "hb",
-                 "kolesterol", "gula_darah", "asam_urat"]
+    key_feats = ["umur", "imt", "sistolik", "diastolik",
+                 "kolesterol", "gds_1"]
     key_feats = [f for f in key_feats if f in features]
 
     cluster_means = df.groupby("cluster")[key_feats].mean()
@@ -291,11 +284,11 @@ def interpret_clusters(df: pd.DataFrame, features: list) -> str:
             lines.append(f"  • Rata-rata IMT   : {row['imt']:.1f} ({tag})")
 
         # TD Sistolik
-        if "sistol" in row:
-            tag = "hipertensi berat" if row["sistol"] >= 180 else \
-                  "hipertensi" if row["sistol"] >= 140 else \
-                  "pra-hipertensi" if row["sistol"] >= 120 else "normal"
-            lines.append(f"  • Rata-rata TD    : {row['sistol']:.0f} mmHg ({tag})")
+        if "sistolik" in row:
+            tag = "hipertensi berat" if row["sistolik"] >= 180 else \
+                  "hipertensi" if row["sistolik"] >= 140 else \
+                  "pra-hipertensi" if row["sistolik"] >= 120 else "normal"
+            lines.append(f"  • Rata-rata TD    : {row['sistolik']:.0f} mmHg ({tag})")
 
         # Kolesterol
         if "kolesterol" in row:
@@ -303,12 +296,12 @@ def interpret_clusters(df: pd.DataFrame, features: list) -> str:
                   "batas tinggi" if row["kolesterol"] >= 180 else "normal"
             lines.append(f"  • Kolesterol      : {row['kolesterol']:.0f} mg/dL ({tag})")
 
-        # Gula darah
-        if "gula_darah" in row:
-            tag = "diabetes (≥200)" if row["gula_darah"] >= 200 else \
-                  "pra-diabetes (≥140)" if row["gula_darah"] >= 140 else \
-                  "batas (≥100)" if row["gula_darah"] >= 100 else "normal"
-            lines.append(f"  • Gula darah      : {row['gula_darah']:.0f} mg/dL ({tag})")
+        # Gula Darah Sewaktu (GDS 1)
+        if "gds_1" in row:
+            tag = "diabetes (≥200)" if row["gds_1"] >= 200 else \
+                  "pra-diabetes (≥140)" if row["gds_1"] >= 140 else \
+                  "batas (≥100)" if row["gds_1"] >= 100 else "normal"
+            lines.append(f"  • GDS 1           : {row['gds_1']:.0f} mg/dL ({tag})")
 
         risk_label = risk_labels[cl]
         risk_note = (

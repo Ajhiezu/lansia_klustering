@@ -1,504 +1,433 @@
 """
-preprocessing.py - Pembersihan & normalisasi data Excel lansia Puskesmas
-Menggunakan openpyxl untuk membaca data mentah (menangani merged cells).
-Fixed column index mapping (0-based) sesuai format laporan Posyandu Lansia.
+preprocessing.py - Pipeline preprocessing data lansia dari dataset ind_pkg_elderly.xlsx
+Membaca file Excel flat (satu sheet) dengan kolom terpilih,
+membersihkan, encode, dan menghasilkan DataFrame siap clustering.
 """
 
 # Standard Library
 from collections import defaultdict
+from datetime import datetime
 import logging
 from pathlib import Path
 import re
 
 # Third Party
 import numpy as np
-import openpyxl
 import pandas as pd
 
 # Local
-from app.core.config import SKIP_SHEETS, MIN_FILL_RATIO
+from app.core.config import (
+    USECOLS_EXCEL,
+    COLUMN_RENAME_MAP,
+    COL_MISSING_THRESHOLD,
+    ROW_MISSING_THRESHOLD,
+)
 
 logger = logging.getLogger("lansia.preprocessing")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Konstanta: mapping posisi kolom tetap berdasarkan index (0-based)
+# 1. Membaca Data
 # ══════════════════════════════════════════════════════════════════════════════
 
-COL = {
-    "nama":         1,
-    "nik":          2,
-    "kunjungan_baru": 3,
-    "kunjungan_lama": 4,
-    "umur_45_59_L": 5,
-    "umur_45_59_P": 6,
-    "umur_60_69_L": 7,
-    "umur_60_69_P": 8,
-    "umur_70p_L":   9,
-    "umur_70p_P":   10,
-    "imt_L":        11,
-    "imt_N":        12,
-    "imt_K":        13,
-    "td_T":         14,
-    "td_N":         15,
-    "td_R":         16,
-    "kemandirian_A":        17,
-    "kemandirian_B_ringan": 18,
-    "kemandirian_B_sedang": 19,
-    "kemandirian_B_berat":  20,
-    "kemandirian_B_total":  21,
-    "skilas_penurunan_kognitif":     22,
-    "skilas_keterbatasan_mobilitas": 23,
-    "skilas_malnutrisi":             24,
-    "skilas_ggn_penglihatan":        25,
-    "skilas_ggn_pendengaran":        26,
-    "skilas_gejala_depresi":         27,
-    "hb_N":         28,
-    "hb_K":         29,
-    "kolesterol_N": 30,
-    "kolesterol_T": 31,
-    "gula_darah_N": 32,
-    "gula_darah_T": 33,
-    "asam_urat_N":  34,
-    "asam_urat_T":  35,
-    "ggn_paru":     36,
-    "ggn_ginjal":   37,
-    "diobati":      38,
-    "dirujuk":      39,
-}
+def baca_data(filepath: Path) -> pd.DataFrame:
+    """
+    Baca file Excel hanya kolom yang diperlukan menggunakan `usecols`.
+    Mengembalikan DataFrame mentah dengan kolom terpilih.
+    """
+    filepath = Path(filepath) if not isinstance(filepath, Path) else filepath
+    logger.info(f"📂 Membaca file: {filepath.name}")
 
-# Fitur numerik utama (untuk imputasi & statistik)
-NUMERIC_FEATURES = ["umur", "imt", "sistol", "diastol",
-                    "hb", "kolesterol", "gula_darah", "asam_urat"]
+    df = pd.read_excel(filepath, usecols=USECOLS_EXCEL)
 
-# Semua fitur yang akan digunakan untuk K-Means
-ALL_FEATURE_COLS = [
-    "umur", "jenis_kelamin", "imt", "sistol", "diastol",
-    "kemandirian_A", "kemandirian_B",
-    "skilas_penurunan_kognitif", "skilas_keterbatasan_mobilitas",
-    "skilas_malnutrisi", "skilas_ggn_penglihatan",
-    "skilas_ggn_pendengaran", "skilas_gejala_depresi",
-    "hb", "kolesterol", "gula_darah", "asam_urat",
-    "gangguan_paru", "gangguan_ginjal",
-    "kunjungan_baru", "kunjungan_lama",
-    "diobati", "dirujuk",
-]
+    logger.info(f"   Kolom dimuat: {len(df.columns)}")
+    logger.info(f"   Baris terbaca: {len(df)}")
+    return df
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Helper Functions
+# 2. Memilih & Mengganti Nama Kolom
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _safe_get(row, idx):
-    """Ambil nilai dari row berdasarkan index, return None jika out of range."""
-    return row[idx] if idx < len(row) else None
-
-
-def _clean_str(val):
-    """Bersihkan string: hapus whitespace, backtick, newline."""
-    if val is None:
-        return None
-    s = str(val).strip().replace("`", "").replace("\n", " ").strip()
-    return s if s and s.upper() not in ("NONE", "NAN") else None
-
-
-def _is_data_row(row):
+def pilih_dan_rename_kolom(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Baris data valid jika:
-    - col[0] bisa jadi angka > 0 (nomor urut)
-    - col[1] harus string nama (bukan angka) — menyaring baris header nomor kolom
+    Rename kolom Excel asli menjadi format snake_case yang ringkas
+    sesuai COLUMN_RENAME_MAP di config.
     """
-    if not row or row[0] is None or row[1] is None:
-        return False
-    try:
-        float(str(row[0]).strip())
-    except (ValueError, TypeError):
-        return False
-    # col[1] harus teks nama, bukan angka
-    try:
-        float(str(row[1]).strip())
-        return False  # col[1] adalah angka → baris header nomor kolom, SKIP
-    except (ValueError, TypeError):
-        pass
-    # Harus ada nama
-    nama = _clean_str(row[1])
-    return bool(nama)
-
-
-def _extract_umur_and_gender(row):
-    """
-    Ekstrak umur dan jenis kelamin dari kolom usia_*_L/P.
-    Return (umur: float, jenis_kelamin: int) — 1=L, 0=P.
-    """
-    cols = [
-        (COL["umur_45_59_L"], 1),
-        (COL["umur_45_59_P"], 0),
-        (COL["umur_60_69_L"], 1),
-        (COL["umur_60_69_P"], 0),
-        (COL["umur_70p_L"],   1),
-        (COL["umur_70p_P"],   0),
-    ]
-    for col_idx, gender in cols:
-        val = _safe_get(row, col_idx)
-        if val is not None:
-            s = str(val).strip()
-            if s and s.upper() not in ("NONE", ""):
-                nums = re.findall(r"[\d.]+", s.replace(",", "."))
-                if nums:
-                    try:
-                        return float(nums[0]), gender
-                    except ValueError:
-                        pass
-    return None, None
-
-
-def _parse_imt(bb_str):
-    """
-    Parse IMT dari berbagai format:
-    - BB/TB: "66/160" → hitung IMT = BB / (TB/100)²
-    - Angka campuran: "27/G" → ambil angka pertama
-    - Angka langsung: "25.3"
-    """
-    if bb_str is None:
-        return None
-    s = str(bb_str).strip().replace(",", ".")
-    if not s or s.upper() in ("NONE", "NAN", ""):
-        return None
-    # Format BB/TB: dua angka dipisah slash
-    slash = re.match(r"^([\d.]+)\s*/\s*([\d.]+)$", s)
-    if slash:
-        try:
-            bb = float(slash.group(1))
-            tb = float(slash.group(2))
-            if tb > 3:
-                tb /= 100
-            if tb > 0 and bb > 0:
-                return round(bb / (tb ** 2), 2)
-        except (ValueError, ZeroDivisionError):
-            pass
-    # Format '27/G' → ambil angka pertama
-    slash_mix = re.match(r"^([\d.]+)\s*/", s)
-    if slash_mix:
-        try:
-            v = float(slash_mix.group(1))
-            return round(v, 2) if v > 5 else None
-        except ValueError:
-            pass
-    # Angka langsung
-    nums = re.findall(r"[\d.]+", s)
-    if nums:
-        try:
-            return round(float(nums[0]), 2)
-        except ValueError:
-            pass
-    return None
-
-
-def _parse_td(row):
-    """Parse tekanan darah sistolik/diastolik dari format '120/80'."""
-    for col_idx in [COL["td_T"], COL["td_N"], COL["td_R"]]:
-        val = _safe_get(row, col_idx)
-        if val is not None:
-            s = str(val).strip().replace(",", ".")
-            m = re.match(r"^(\d+)\s*/\s*(\d+)$", s)
-            if m:
-                return int(m.group(1)), int(m.group(2))
-    return None, None
-
-
-def _has_value(row, col_idx):
-    """Cek apakah sel terisi (bukan kosong/0/None)."""
-    val = _safe_get(row, col_idx)
-    if val is None:
-        return 0
-    s = str(val).strip().upper()
-    return 0 if s in ("", "NONE", "NAN", "0", "0.0") else 1
-
-
-def _parse_skilas_val(row, col_idx):
-    """
-    Parse nilai SKILAS:
-    - Y, G, V, 1 → 1
-    - N, -, T, kosong, atau 0 → 0
-    """
-    val = _safe_get(row, col_idx)
-    if val is None:
-        return 0
-    s = str(val).strip().upper()
-    if s.endswith(".0"):
-        s = s[:-2]
-    if s in ("Y", "G", "V", "1"):
-        return 1
-    if s in ("N", "-", "T", "", "NONE", "NAN", "0"):
-        return 0
-    # Fallback jika berupa angka positif
-    try:
-        if float(s) > 0:
-            return 1
-    except ValueError:
-        pass
-    return 0
-
-
-
-def _get_numeric(row, *col_indices):
-    """Ambil nilai numerik pertama yang valid dari beberapa kolom."""
-    for col_idx in col_indices:
-        val = _safe_get(row, col_idx)
-        if val is not None:
-            try:
-                v = float(str(val).strip().replace(",", "."))
-                if v > 0:
-                    return v
-            except (ValueError, TypeError):
-                pass
-    return None
-
-
-def _parse_binary_field(row, col_idx):
-    """Parse field biner: terisi → 1, kosong → 0."""
-    val = _safe_get(row, col_idx)
-    if val is None:
-        return 0
-    s = str(val).strip().upper()
-    return 0 if s in ("", "NONE", "NAN", "0", "0.0", "T") else 1
+    df = df.rename(columns=COLUMN_RENAME_MAP)
+    logger.info(f"   Kolom setelah rename: {list(df.columns)}")
+    return df
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Sheet Processing
+# 3. Membersihkan Data (Cleaning & Validasi Tipe)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _process_sheet(ws, sheet_name):
-    """Proses satu sheet worksheet openpyxl menjadi list of dict."""
-    records = []
-    for row in ws.iter_rows(values_only=True):
-        if not _is_data_row(row):
-            continue
+def bersihkan_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Pembersihan data:
+    - Strip whitespace pada kolom string
+    - Konversi kolom numerik dengan pd.to_numeric(errors='coerce')
+    - Hapus karakter non-numerik pada kolom angka jika diperlukan
+    - Hapus duplikat berdasarkan NIK
+    """
+    df = df.copy()
 
-        row = list(row) + [None] * 60  # pad agar aman akses index
-
-        nama = _clean_str(row[COL["nama"]])
-        if not nama:
-            continue
-
-        nik = _clean_str(row[COL["nik"]])
-
-        # Kunjungan: pisahkan Baru dan Lama
-        baru_val = _safe_get(row, COL["kunjungan_baru"])
-        lama_val = _safe_get(row, COL["kunjungan_lama"])
-
-        def is_filled(v):
-            if v is None:
-                return False
-            s = str(v).strip().upper()
-            return s not in ("", "NONE", "NAN", "0", "0.0")
-
-        if is_filled(baru_val):
-            kunjungan_baru = 1
-            kunjungan_lama = 0
-        elif is_filled(lama_val):
-            kunjungan_baru = 0
-            kunjungan_lama = 1
-        else:
-            kunjungan_baru = 0
-            kunjungan_lama = 0
-
-        umur, jenis_kelamin = _extract_umur_and_gender(row)
-
-        imt_raw = (_safe_get(row, COL["imt_L"])
-                   or _safe_get(row, COL["imt_N"])
-                   or _safe_get(row, COL["imt_K"]))
-        imt = _parse_imt(imt_raw)
-
-        sistol, diastol = _parse_td(row)
-
-        kemandirian_A = _has_value(row, COL["kemandirian_A"])
-        kemandirian_B = max(
-            _has_value(row, COL["kemandirian_B_ringan"]),
-            _has_value(row, COL["kemandirian_B_sedang"]),
-            _has_value(row, COL["kemandirian_B_berat"]),
-            _has_value(row, COL["kemandirian_B_total"]),
-        )
-
-        hb         = _get_numeric(row, COL["hb_N"], COL["hb_K"])
-        kolesterol  = _get_numeric(row, COL["kolesterol_N"], COL["kolesterol_T"])
-        gula_darah  = _get_numeric(row, COL["gula_darah_N"], COL["gula_darah_T"])
-        asam_urat   = _get_numeric(row, COL["asam_urat_N"], COL["asam_urat_T"])
-
-        records.append({
-            "desa":               sheet_name,
-            "nama":               nama,
-            "nik":                nik,
-            "kunjungan_baru":     kunjungan_baru,
-            "kunjungan_lama":     kunjungan_lama,
-            "umur":               umur,
-            "jenis_kelamin":      jenis_kelamin,
-            "imt":                imt,
-            "sistol":             sistol,
-            "diastol":            diastol,
-            "kemandirian_A":      kemandirian_A,
-            "kemandirian_B":      kemandirian_B,
-            "skilas_penurunan_kognitif":     _parse_skilas_val(row, COL["skilas_penurunan_kognitif"]),
-            "skilas_keterbatasan_mobilitas": _parse_skilas_val(row, COL["skilas_keterbatasan_mobilitas"]),
-            "skilas_malnutrisi":             _parse_skilas_val(row, COL["skilas_malnutrisi"]),
-            "skilas_ggn_penglihatan":        _parse_skilas_val(row, COL["skilas_ggn_penglihatan"]),
-            "skilas_ggn_pendengaran":        _parse_skilas_val(row, COL["skilas_ggn_pendengaran"]),
-            "skilas_gejala_depresi":         _parse_skilas_val(row, COL["skilas_gejala_depresi"]),
-            "hb":                 hb,
-            "kolesterol":         kolesterol,
-            "gula_darah":         gula_darah,
-            "asam_urat":          asam_urat,
-            "gangguan_paru":      _parse_binary_field(row, COL["ggn_paru"]),
-            "gangguan_ginjal":    _parse_binary_field(row, COL["ggn_ginjal"]),
-            "diobati":            _parse_binary_field(row, COL["diobati"]),
-            "dirujuk":            _parse_binary_field(row, COL["dirujuk"]),
-        })
-
-    return records
-
-
-def _load_all_sheets(filepath):
-    """Baca semua sheet desa dari workbook Excel."""
-    wb = openpyxl.load_workbook(filepath, data_only=True)
-    all_records = []
-    for name in wb.sheetnames:
-        if name.strip() in SKIP_SHEETS or name.lower().strip() in {s.lower() for s in SKIP_SHEETS}:
-            logger.info(f"  ⏭  Skip: {name}")
-            continue
-        recs = _process_sheet(wb[name], name)
-        logger.info(f"  ✅ {name:<20}: {len(recs):>4} baris")
-        all_records.extend(recs)
-    return pd.DataFrame(all_records)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Cleaning & Validasi Range
-# ══════════════════════════════════════════════════════════════════════════════
-
-def _clean_df(df):
-    """Validasi range dan normalisasi tipe data."""
-    df = df[df["nama"].notna()].copy()
-
-    # Validasi range: nilai di luar batas → NaN
-    ranges = {
-        "umur":       (40, 110),
-        "imt":        (10, 60),
-        "sistol":     (60, 300),
-        "diastol":    (40, 200),
-        "hb":         (5, 25),
-        "kolesterol": (50, 600),
-        "gula_darah": (30, 800),
-        "asam_urat":  (1, 25),
-    }
-    for col, (lo, hi) in ranges.items():
+    # --- Bersihkan kolom string ---
+    str_cols = ["kecamatan", "desa", "nama", "nik"]
+    for col in str_cols:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-            df.loc[df[col] < lo, col] = np.nan
-            df.loc[df[col] > hi, col] = np.nan
+            df[col] = df[col].astype(str).str.strip()
+            # Ganti string 'nan' / 'None' hasil konversi menjadi NaN
+            df[col] = df[col].replace({"nan": np.nan, "None": np.nan, "": np.nan})
 
-    # Jenis kelamin: NaN → 0 (default perempuan)
-    df["jenis_kelamin"] = df["jenis_kelamin"].fillna(0).astype(int)
-
-    # Kolom biner: NaN → 0
-    binary = [
-        "kunjungan_baru", "kunjungan_lama", "kemandirian_A", "kemandirian_B",
-        "skilas_penurunan_kognitif", "skilas_keterbatasan_mobilitas",
-        "skilas_malnutrisi", "skilas_ggn_penglihatan",
-        "skilas_ggn_pendengaran", "skilas_gejala_depresi",
-        "gangguan_paru", "gangguan_ginjal", "diobati", "dirujuk",
+    # --- Konversi kolom numerik ---
+    numeric_cols = [
+        "berat_badan", "tinggi_badan",
+        "sistolik", "diastolik",
+        "gds_1", "gds_2", "gdp", "gd2pp",
+        "kolesterol",
     ]
-    for col in binary:
-        df[col] = df[col].fillna(0).astype(int)
+    for col in numeric_cols:
+        if col in df.columns:
+            # Hapus karakter non-numerik (kecuali titik dan minus)
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(r"[^\d.\-]", "", regex=True)
+                .replace({"": np.nan, "nan": np.nan})
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # --- Ganti nilai 0 pada kolom gula darah menjadi NaN ---
+    # (pada dataset ini, 0 berarti tidak diperiksa, bukan hasil 0)
+    gula_darah_cols = ["gds_1", "gds_2", "gdp", "gd2pp"]
+    for col in gula_darah_cols:
+        if col in df.columns:
+            df.loc[df[col] == 0, col] = np.nan
+
+    # --- Konversi tanggal_lahir ---
+    if "tanggal_lahir" in df.columns:
+        df["tanggal_lahir"] = pd.to_datetime(df["tanggal_lahir"], errors="coerce")
+
+    # --- Hapus duplikat berdasarkan NIK ---
+    n_before = len(df)
+    df = df.drop_duplicates(subset="nik", keep="first")
+    n_dup = n_before - len(df)
+    if n_dup > 0:
+        logger.info(f"   🗑  Hapus {n_dup} baris duplikat (berdasarkan NIK)")
+
+    # --- Filter hanya Kecamatan Maesan ---
+    if "kecamatan" in df.columns:
+        n_before_filter = len(df)
+        df = df[df["kecamatan"].astype(str).str.strip().str.upper() == "MAESAN"]
+        n_filtered = n_before_filter - len(df)
+        if n_filtered > 0:
+            logger.info(f"   🗑  Filter Kecamatan: Mengabaikan {n_filtered} data lansia di luar Kecamatan Maesan")
+
+    logger.info(f"   Baris setelah cleaning & filtering: {len(df)}")
     return df.reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Drop Kolom Seluruhnya Null/0
+# 4. Feature Engineering (Umur & IMT)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _drop_all_null_columns(df, label=""):
-    """Hapus kolom yang seluruh nilainya null/0 di semua desa."""
-    numeric_cols = ["hb", "kolesterol", "gula_darah", "asam_urat",
-                    "sistol", "diastol", "imt", "umur"]
-    dropped = []
-    for col in numeric_cols:
-        if col in df.columns and df[col].isna().all():
-            dropped.append(col)
+def buat_fitur_baru(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Membuat fitur turunan:
+    - umur  = tahun_sekarang - tahun_lahir
+    - imt   = berat_badan / (tinggi_badan_meter ** 2)
+    """
+    df = df.copy()
+    tahun_sekarang = datetime.now().year
 
-    # Kolom biner: drop jika semua 0
+    # --- Umur ---
+    if "tanggal_lahir" in df.columns:
+        df["umur"] = tahun_sekarang - df["tanggal_lahir"].dt.year
+        # Validasi range: umur harus masuk akal (40–120)
+        df.loc[(df["umur"] < 40) | (df["umur"] > 120), "umur"] = np.nan
+        logger.info(f"   Umur dihitung: {df['umur'].notna().sum()} valid, "
+                    f"{df['umur'].isna().sum()} invalid/null")
+    else:
+        df["umur"] = np.nan
+        logger.warning("   ⚠ Kolom 'tanggal_lahir' tidak ditemukan!")
+
+    # --- IMT ---
+    if "berat_badan" in df.columns and "tinggi_badan" in df.columns:
+        tinggi_m = df["tinggi_badan"] / 100  # cm → m
+        df["imt"] = df["berat_badan"] / (tinggi_m ** 2)
+        df["imt"] = df["imt"].round(2)
+        # Validasi range IMT: 10–60
+        df.loc[(df["imt"] < 10) | (df["imt"] > 60), "imt"] = np.nan
+        logger.info(f"   IMT dihitung: {df['imt'].notna().sum()} valid, "
+                    f"{df['imt'].isna().sum()} invalid/null")
+    else:
+        df["imt"] = np.nan
+        logger.warning("   ⚠ Kolom berat_badan / tinggi_badan tidak ditemukan!")
+
+    return df
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 5. Encoding Variabel Kategorikal
+# ══════════════════════════════════════════════════════════════════════════════
+
+def encode_kategorikal(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Encoding biner untuk variabel kategorikal:
+    - jenis_kelamin: Laki-laki → 1, Perempuan → 0
+    - riwayat_hipertensi: Ya → 1, Tidak → 0
+    - gangguan_kognitif: "Kemungkinan ada gangguan kognitif" → 1, lainnya → 0
+    - malnutrisi: "Berisiko Malnutrisi" → 1, "Status Gizi Normal" → 0
+    - depresi: ada gejala → 1, tidak ada → 0, null → tetap null
+    """
+    df = df.copy()
+
+    # --- Jenis Kelamin ---
+    if "jenis_kelamin" in df.columns:
+        jk_map = {"Laki-laki": 1, "Perempuan": 0}
+        df["jenis_kelamin"] = (
+            df["jenis_kelamin"]
+            .astype(str)
+            .str.strip()
+            .map(jk_map)
+        )
+        # Nilai yang tidak cocok mapping → NaN, isi default 0
+        df["jenis_kelamin"] = df["jenis_kelamin"].fillna(0).astype(int)
+
+    # --- Riwayat Hipertensi ---
+    if "riwayat_hipertensi" in df.columns:
+        ht_map = {"Ya": 1, "Tidak": 0}
+        df["riwayat_hipertensi"] = (
+            df["riwayat_hipertensi"]
+            .astype(str)
+            .str.strip()
+            .map(ht_map)
+        )
+        # NaN tetap NaN (jika data kosong di Excel)
+        logger.info(f"   Riwayat hipertensi: "
+                    f"Ya={int((df['riwayat_hipertensi'] == 1).sum())}, "
+                    f"Tidak={int((df['riwayat_hipertensi'] == 0).sum())}, "
+                    f"null={int(df['riwayat_hipertensi'].isna().sum())}")
+
+    # --- Gangguan Kognitif ---
+    if "gangguan_kognitif" in df.columns:
+        def _encode_kognitif(val):
+            if pd.isna(val):
+                return np.nan
+            s = str(val).strip().lower()
+            if "ada gangguan" in s and "tidak" not in s:
+                return 1
+            elif "tidak ada gangguan" in s:
+                return 0
+            return np.nan
+
+        df["gangguan_kognitif"] = df["gangguan_kognitif"].apply(_encode_kognitif)
+        logger.info(f"   Gangguan kognitif: "
+                    f"1={int((df['gangguan_kognitif'] == 1).sum())}, "
+                    f"0={int((df['gangguan_kognitif'] == 0).sum())}, "
+                    f"null={int(df['gangguan_kognitif'].isna().sum())}")
+
+    # --- Malnutrisi ---
+    if "malnutrisi" in df.columns:
+        def _encode_malnutrisi(val):
+            if pd.isna(val):
+                return np.nan
+            s = str(val).strip().lower()
+            if "berisiko" in s or "malnutrisi" in s and "normal" not in s:
+                return 1
+            elif "normal" in s:
+                return 0
+            return np.nan
+
+        df["malnutrisi"] = df["malnutrisi"].apply(_encode_malnutrisi)
+        logger.info(f"   Malnutrisi: "
+                    f"1={int((df['malnutrisi'] == 1).sum())}, "
+                    f"0={int((df['malnutrisi'] == 0).sum())}, "
+                    f"null={int(df['malnutrisi'].isna().sum())}")
+
+    # --- Depresi ---
+    if "depresi" in df.columns:
+        def _encode_depresi(val):
+            if pd.isna(val):
+                return np.nan
+            s = str(val).strip().lower()
+            if s in ("nan", "none", ""):
+                return np.nan
+            if "ada" in s and "tidak" not in s:
+                return 1
+            elif "tidak" in s:
+                return 0
+            # Fallback: jika ada konten, anggap ada gejala
+            return 1 if s else np.nan
+
+        df["depresi"] = df["depresi"].apply(_encode_depresi)
+        logger.info(f"   Depresi: "
+                    f"1={int((df['depresi'] == 1).sum())}, "
+                    f"0={int((df['depresi'] == 0).sum())}, "
+                    f"null={int(df['depresi'].isna().sum())}")
+
+    return df
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 6. Penanganan Missing Value (TANPA IMPUTASI)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def tangani_missing_value(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Penanganan missing value TANPA imputasi:
+    - Hapus kolom jika proporsi null > COL_MISSING_THRESHOLD
+    - Hapus baris jika proporsi null > ROW_MISSING_THRESHOLD
+    Ambang batas didefinisikan di config.py agar mudah diubah.
+    """
+    df = df.copy()
+
+    # Kolom yang dianalisis untuk missing (hanya fitur numerik + biner)
+    fitur_cols = [
+        "umur", "jenis_kelamin", "imt",
+        "sistolik", "diastolik",
+        "gds_1", "gds_2", "gdp", "gd2pp",
+        "kolesterol",
+        "riwayat_hipertensi", "gangguan_kognitif", "malnutrisi", "depresi",
+    ]
+    fitur_exist = [c for c in fitur_cols if c in df.columns]
+
+    # --- Hapus KOLOM dengan terlalu banyak null ---
+    logger.info(f"📉 Analisis missing value per kolom (threshold: {COL_MISSING_THRESHOLD:.0%}):")
+    cols_to_drop = []
+    for col in fitur_exist:
+        n_miss = df[col].isna().sum()
+        pct = n_miss / len(df) if len(df) > 0 else 0
+        logger.info(f"   {col:<25}: {n_miss:>4} missing ({pct:.1%})")
+        if pct > COL_MISSING_THRESHOLD:
+            cols_to_drop.append(col)
+
+    if cols_to_drop:
+        logger.info(f"🗑  Kolom dihapus (null > {COL_MISSING_THRESHOLD:.0%}): {cols_to_drop}")
+        df = df.drop(columns=cols_to_drop)
+    else:
+        logger.info("   ✅ Tidak ada kolom yang dihapus")
+
+    # Update daftar fitur yang tersisa
+    fitur_exist = [c for c in fitur_exist if c in df.columns]
+
+    # --- Hapus BARIS dengan terlalu banyak null ---
+    if fitur_exist:
+        n_fitur = len(fitur_exist)
+        row_null_count = df[fitur_exist].isna().sum(axis=1)
+        row_null_ratio = row_null_count / n_fitur
+        rows_to_drop = row_null_ratio > ROW_MISSING_THRESHOLD
+
+        n_drop = rows_to_drop.sum()
+        if n_drop > 0:
+            logger.info(f"🗑  Hapus {n_drop} baris (null > {ROW_MISSING_THRESHOLD:.0%} "
+                        f"dari {n_fitur} fitur)")
+            df = df[~rows_to_drop].reset_index(drop=True)
+        else:
+            logger.info("   ✅ Tidak ada baris yang dihapus karena missing value")
+
+    logger.info(f"   Baris setelah penanganan missing: {len(df)}")
+    return df
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7. Validasi Data Akhir
+# ══════════════════════════════════════════════════════════════════════════════
+
+def validasi_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Validasi akhir:
+    - Pastikan kolom numerik benar-benar numerik
+    - Pastikan kolom biner hanya bernilai 0 atau 1 (atau NaN)
+    - Validasi range untuk kolom kesehatan
+    """
+    df = df.copy()
+
+    # --- Pastikan tipe numerik ---
+    numeric_cols = [
+        "umur", "imt", "berat_badan", "tinggi_badan",
+        "sistolik", "diastolik",
+        "gds_1", "gds_2", "gdp", "gd2pp",
+        "kolesterol",
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # --- Validasi range ---
+    ranges = {
+        "umur":      (40, 120),
+        "imt":       (10, 60),
+        "sistolik":  (60, 300),
+        "diastolik": (30, 200),
+        "gds_1":     (20, 800),
+        "gds_2":     (20, 800),
+        "gdp":       (20, 800),
+        "gd2pp":     (20, 800),
+        "kolesterol": (50, 600),
+    }
+    for col, (lo, hi) in ranges.items():
+        if col in df.columns:
+            outlier_mask = (df[col] < lo) | (df[col] > hi)
+            n_outlier = outlier_mask.sum()
+            if n_outlier > 0:
+                logger.info(f"   ⚠ {col}: {n_outlier} nilai di luar range "
+                            f"[{lo}, {hi}] → NaN")
+                df.loc[outlier_mask, col] = np.nan
+
+    # --- Pastikan encoding biner hanya 0 atau 1 ---
     binary_cols = [
-        "skilas_penurunan_kognitif", "skilas_keterbatasan_mobilitas",
-        "skilas_malnutrisi", "skilas_ggn_penglihatan",
-        "skilas_ggn_pendengaran", "skilas_gejala_depresi",
-        "gangguan_paru", "gangguan_ginjal", "kemandirian_A", "kemandirian_B",
-        "diobati", "dirujuk",
+        "jenis_kelamin", "riwayat_hipertensi",
+        "gangguan_kognitif", "malnutrisi", "depresi",
     ]
     for col in binary_cols:
-        if col in df.columns and df[col].sum() == 0:
-            dropped.append(col)
+        if col in df.columns:
+            valid_mask = df[col].isna() | df[col].isin([0, 1])
+            n_invalid = (~valid_mask).sum()
+            if n_invalid > 0:
+                logger.warning(f"   ⚠ {col}: {n_invalid} nilai bukan 0/1 → NaN")
+                df.loc[~valid_mask, col] = np.nan
 
-    if dropped:
-        logger.info(f"🗑  Kolom dihapus (semua null/nol di {label}): {dropped}")
-        df = df.drop(columns=dropped)
-    else:
-        logger.info(f"✅ Tidak ada kolom yang sepenuhnya null di {label}")
-    return df, dropped
+    logger.info("   ✅ Validasi data selesai")
+    return df
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Imputasi Missing Values
+# 8. Menyimpan / Menyiapkan Hasil Preprocessing
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _impute_for_kmeans(df, feature_cols):
+def siapkan_output(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Imputasi kolom numerik per desa dengan aturan threshold:
-    - Jika kolom terisi >= MIN_FILL_RATIO di suatu desa → imputasi missing dengan median desa
-    - Jika kolom terisi < MIN_FILL_RATIO di suatu desa  → SKIP, biarkan NaN (data terlalu sedikit)
-    
-    Tidak ada global fallback — desa tanpa data cukup tetap kosong untuk kolom itu.
+    Menyiapkan DataFrame akhir:
+    - Urutkan berdasarkan desa, kecamatan
+    - Hapus kolom bantu (tanggal_lahir)
+    - Reset index
     """
-    
-    num_in_features = [c for c in NUMERIC_FEATURES if c in feature_cols]
-    df_imputed = df.copy()
-    
-    for col in num_in_features:
-        skipped_desa = []
-        imputed_desa = []
-        
-        for desa, group in df.groupby("desa"):
-            non_null = group[col].notna().sum()
-            total    = len(group)
-            ratio    = non_null / total if total > 0 else 0
-            
-            if ratio >= MIN_FILL_RATIO:
-                # Cukup data → imputasi NaN dengan median desa
-                med = group[col].median()
-                if pd.notna(med):
-                    n_missing = group[col].isna().sum()
-                    if n_missing > 0:
-                        idx = df_imputed[
-                            (df_imputed["desa"] == desa) & (df_imputed[col].isna())
-                        ].index
-                        df_imputed.loc[idx, col] = med
-                        imputed_desa.append(f"{desa}({non_null}/{total}, isi {n_missing})")
-            else:
-                # Terlalu sedikit data → skip, biarkan NaN
-                if non_null > 0:
-                    skipped_desa.append(f"{desa}({non_null}/{total})")
-                else:
-                    skipped_desa.append(f"{desa}(kosong)")
-        
-        if skipped_desa:
-            logger.info(f"  {col:<15}: SKIP desa {', '.join(skipped_desa)}")
-        if imputed_desa:
-            logger.info(f"  {col:<15}: IMPUTASI desa {', '.join(imputed_desa)}")
-                    
-    return df_imputed
+    df = df.copy()
+
+    # Urutkan
+    sort_cols = []
+    if "desa" in df.columns:
+        sort_cols.append("desa")
+    if "kecamatan" in df.columns:
+        sort_cols.append("kecamatan")
+    if sort_cols:
+        df = df.sort_values(sort_cols).reset_index(drop=True)
+
+    # Hapus kolom bantu
+    drop_cols = ["tanggal_lahir"]
+    for col in drop_cols:
+        if col in df.columns:
+            df = df.drop(columns=[col])
+
+    logger.info(f"   Kolom final ({len(df.columns)}): {list(df.columns)}")
+    return df
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Pipeline utama preprocessing
+# Pipeline Utama
 # ══════════════════════════════════════════════════════════════════════════════
 
 def run_preprocessing(input_file) -> tuple:
@@ -507,73 +436,68 @@ def run_preprocessing(input_file) -> tuple:
 
     Kembalikan:
         (df_clean, stats_dict)
-        df_clean : DataFrame gabungan semua desa, sudah di-clean dan diimputasi
+        df_clean : DataFrame bersih siap clustering
         stats    : dict statistik untuk laporan akhir
     """
     input_file = Path(input_file) if not isinstance(input_file, Path) else input_file
 
     logger.info("=" * 60)
-    logger.info("  PREPROCESSING DATA SKILAS → K-MEANS")
+    logger.info("  PREPROCESSING DATA PKG LANSIA")
     logger.info("=" * 60)
 
     stats = defaultdict(int)
 
-    # ── Tahap 1: Baca semua sheet ──
-    logger.info("📂 Membaca data dari semua sheet desa...")
-    df = _load_all_sheets(input_file)
+    # ── Tahap 1: Baca data ──
+    logger.info("TAHAP 1: Membaca data...")
+    df = baca_data(input_file)
     stats["total_baris_mentah"] = len(df)
-    logger.info(f"📊 Total baris terbaca: {len(df)}")
 
     if df.empty:
-        logger.error("Tidak ada data yang berhasil diproses!")
+        logger.error("Tidak ada data yang berhasil dibaca!")
         return pd.DataFrame(), dict(stats)
 
-    # Hitung jumlah sheet
-    stats["sheets_diproses"] = int(df["desa"].nunique())
+    # ── Tahap 2: Pilih & rename kolom ──
+    logger.info("TAHAP 2: Rename kolom...")
+    df = pilih_dan_rename_kolom(df)
 
-    # ── Tahap 2: Cleaning & validasi range ──
-    logger.info("🧹 Cleaning & validasi range...")
-    df = _clean_df(df)
-    stats["total_valid"] = len(df)
-    stats["baris_dihapus"] = stats["total_baris_mentah"] - stats["total_valid"]
-    logger.info(f"📊 Total setelah cleaning: {len(df)}")
+    # ── Tahap 3: Cleaning ──
+    logger.info("TAHAP 3: Membersihkan data...")
+    df = bersihkan_data(df)
 
-    # Distribusi kunjungan
-    logger.info(f"🔍 Distribusi kunjungan: Baru={df['kunjungan_baru'].sum()}, "
-                f"Lama={df['kunjungan_lama'].sum()}")
+    # ── Tahap 4: Feature engineering ──
+    logger.info("TAHAP 4: Feature engineering (umur, IMT)...")
+    df = buat_fitur_baru(df)
 
-    # Missing values info
-    logger.info("📉 Missing values kolom numerik (setelah cleaning):")
-    for col in NUMERIC_FEATURES:
-        if col in df.columns:
-            n = df[col].isna().sum()
-            pct = n / len(df) * 100 if len(df) > 0 else 0
-            logger.info(f"  {col:<15}: {n:>4} missing ({pct:.1f}%)")
+    # ── Tahap 5: Encoding kategorikal ──
+    logger.info("TAHAP 5: Encoding variabel kategorikal...")
+    df = encode_kategorikal(df)
 
-    # Statistik missing sebelum imputasi
-    stats["umur_invalid"] = int(df["umur"].isna().sum()) if "umur" in df.columns else 0
-    stats["imt_invalid"] = int(df["imt"].isna().sum()) if "imt" in df.columns else 0
-    stats["td_invalid"] = int(df["sistol"].isna().sum()) if "sistol" in df.columns else 0
+    # ── Tahap 6: Penanganan missing value ──
+    logger.info("TAHAP 6: Penanganan missing value...")
+    df = tangani_missing_value(df)
 
-    # ── Tahap 3: Imputasi missing values ──
-    feature_cols = ALL_FEATURE_COLS
-    logger.info("🔢 Imputasi missing values (median per desa)...")
-    df = _impute_for_kmeans(df, feature_cols)
+    # ── Tahap 7: Validasi data ──
+    logger.info("TAHAP 7: Validasi data akhir...")
+    df = validasi_data(df)
 
-    # ── Tahap 4: Mengisi sisa data kosong (NaN) dengan 0 ──
-    logger.info("🧹 Mengisi sisa data kosong (NaN) dengan 0...")
-    df[feature_cols] = df[feature_cols].fillna(0)
-
-    still_nan = df[feature_cols].isna().sum().sum()
-    logger.info(f"   Sisa NaN di fitur K-Means: {still_nan}")
+    # ── Tahap 8: Siapkan output ──
+    logger.info("TAHAP 8: Menyiapkan output...")
+    df = siapkan_output(df)
 
     # Statistik akhir
-    logger.info(f"📋 Jumlah data per desa:")
+    stats["total_valid"] = len(df)
+    stats["baris_dihapus"] = stats["total_baris_mentah"] - stats["total_valid"]
+    stats["sheets_diproses"] = 1  # Dataset flat, 1 sheet
+    stats["umur_invalid"] = int(df["umur"].isna().sum()) if "umur" in df.columns else 0
+    stats["imt_invalid"] = int(df["imt"].isna().sum()) if "imt" in df.columns else 0
+    stats["td_invalid"] = int(df["sistolik"].isna().sum()) if "sistolik" in df.columns else 0
+
+    # Distribusi per desa
+    logger.info("📋 Jumlah data per desa:")
     for desa, count in df.groupby("desa").size().items():
-        logger.info(f"  {desa}: {count}")
+        logger.info(f"   {desa}: {count}")
 
-    logger.info(f"📌 Fitur K-Means yang digunakan ({len(feature_cols)} kolom): "
-                f"{', '.join(feature_cols)}")
+    logger.info(f"📊 Total data bersih: {len(df)} baris, {len(df.columns)} kolom")
+    logger.info("=" * 60)
 
-    logger.info(f"Total data gabungan: {len(df)} baris, {len(df.columns)} kolom")
     return df, dict(stats)

@@ -161,7 +161,7 @@ def save_evaluation_txt(metrics: dict, interpretasi: str, path: Path):
 
     lines = [
         "=" * 60,
-        "EVALUASI CLUSTERING K-MEANS – DATA LANSIA PUSKESMAS TEMPEH",
+        "EVALUASI CLUSTERING K-MEANS – DATA LANSIA PUSKESMAS MAESAN",
         "=" * 60,
         "",
         f"Jumlah Cluster         : {N_CLUSTERS}",
@@ -220,9 +220,10 @@ def save_gis_csv(df: pd.DataFrame, path: Path):
     """
     Export CSV siap QGIS.
     """
-    cols_gis = ["nama", "nik", "desa", "umur", "jenis_kelamin", "cluster",
-                "cluster_label", "imt", "sistol", "diastol",
-                "hb", "kolesterol", "gula_darah", "asam_urat"]
+    cols_gis = ["nama", "nik", "kecamatan", "desa", "umur", "jenis_kelamin",
+                "cluster", "cluster_label", "imt", "sistolik", "diastolik",
+                "kolesterol", "gds_1", "gds_2", "gdp", "gd2pp",
+                "riwayat_hipertensi", "gangguan_kognitif", "malnutrisi", "depresi"]
     cols_gis = [c for c in cols_gis if c in df.columns]
     df[cols_gis].to_csv(path, index=False, encoding="utf-8-sig")
     logger.info(f"Disimpan: {path.name} (siap QGIS)")
@@ -292,7 +293,7 @@ def main():
 
     logger = setup_logger("lansia", LOG_DIR)
     logger.info("=" * 60)
-    logger.info("MULAI: Project Clustering Lansia Puskesmas Tempeh")
+    logger.info("MULAI: Project Clustering Lansia Puskesmas Maesan")
     logger.info("=" * 60)
 
     # ── Cek file input ──

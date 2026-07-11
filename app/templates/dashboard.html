@@ -6,7 +6,7 @@
 <div class="row align-items-center mb-4">
     <div class="col-md-8">
         <h1 class="page-title">Beranda Dashboard</h1>
-        <p class="page-subtitle">Sistem Analisis Risiko Kesehatan Lansia Berbasis Clustering K-Means & GIS Puskesmas Tempeh</p>
+        <p class="page-subtitle">Sistem Analisis Risiko Kesehatan Lansia Berbasis Clustering K-Means & GIS Puskesmas Maesan</p>
     </div>
     {% if has_data %}
     <div class="col-md-4 text-md-end">
@@ -25,7 +25,7 @@
     </div>
     <h2 class="fw-bold" style="font-family: 'Outfit', sans-serif;">Selamat Datang di Sistem Analisis Lansia</h2>
     <p class="text-secondary max-w-lg" style="max-width: 600px; line-height: 1.6;">
-        Aplikasi ini dirancang untuk menganalisis risiko kesehatan lansia di wilayah kerja Puskesmas Tempeh, Lumajang secara otomatis menggunakan algoritme <strong>K-Means Clustering</strong> dan memetakan persebarannya berbasis <strong>Sistem Informasi Geografis (GIS)</strong>.
+        Aplikasi ini dirancang untuk menganalisis risiko kesehatan lansia di wilayah kerja Puskesmas Maesan, Bondowoso secara otomatis menggunakan algoritme <strong>K-Means Clustering</strong> dan memetakan persebarannya berbasis <strong>Sistem Informasi Geografis (GIS)</strong>.
     </p>
     <div>
         <a href="{{ url_for('upload.index') }}" class="btn-primary text-decoration-none">
@@ -51,7 +51,7 @@
     <div class="col-md-4">
         <div class="glass-card h-100 d-flex flex-column gap-2">
             <h4 class="text-warning"><i class="fas fa-map-marked-alt"></i> 3. Pemetaan GIS</h4>
-            <p class="text-secondary" style="font-size: 0.9rem;">Visualisasi titik persebaran wilayah kerawanan penyakit lansia per desa di Kecamatan Tempeh, lengkap dengan sebaran spasial interaktif.</p>
+            <p class="text-secondary" style="font-size: 0.9rem;">Visualisasi titik persebaran wilayah kerawanan penyakit lansia per desa di Kecamatan Maesan, lengkap dengan sebaran spasial interaktif.</p>
         </div>
     </div>
 </div>
@@ -142,9 +142,9 @@
                         <td>{{ clus_summary.cluster_means[c_id]['umur']|format_value }} th</td>
                         <td>{{ clus_summary.cluster_means[c_id]['imt']|format_value }}</td>
                         <td>
-                            {{ clus_summary.cluster_means[c_id]['sistol']|int }}/{{ clus_summary.cluster_means[c_id]['diastol']|int }} mmHg
+                            {{ (clus_summary.cluster_means[c_id].get('sistolik') or clus_summary.cluster_means[c_id].get('sistol', 0))|int }}/{{ (clus_summary.cluster_means[c_id].get('diastolik') or clus_summary.cluster_means[c_id].get('diastol', 0))|int }} mmHg
                         </td>
-                        <td>{{ clus_summary.cluster_means[c_id]['gula_darah']|format_value }} mg/dL</td>
+                        <td>{{ clus_summary.cluster_means[c_id].get('gds_1', 0)|format_value }} mg/dL</td>
                     </tr>
                     {% endfor %}
                 </tbody>

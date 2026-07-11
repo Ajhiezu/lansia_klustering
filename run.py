@@ -14,7 +14,7 @@ if __name__ == "__main__":
     
     print("\n" + "=" * 60)
     print("      SISTEM CLUSTERING RISIKO KESEHATAN LANSIA")
-    print("           PUSKESMAS TEMPEH, LUMAJANG")
+    print("           PUSKESMAS MAESAN, BONDOWOSO")
     print("=" * 60)
     print(f" Server berjalan di: http://{host}:{port}/")
     print(" Silakan buka link tersebut di browser Anda.")

@@ -1,14 +1,36 @@
 """
 gis.py - Blueprint route for GIS map visualization.
 Supports filtering by risk level via query parameter.
+Uses actual K-Means clustering results with relative risk ranking.
 """
 
 from flask import Blueprint, render_template, redirect, url_for, flash, Response, request
 from app.models.session_data import session_data
 from app.services.gis_service import generate_map
-from app.core.utils import calculate_individual_risk
+from app.core.clustering import _rank_clusters_by_risk
 
 bp = Blueprint("gis", __name__)
+
+
+def _get_cluster_risk_map(df, features):
+    """
+    Build a mapping from cluster_id -> risk_level using the relative
+    ranking system (_rank_clusters_by_risk) so each of the 3 clusters
+    gets a distinct label: Sehat, Sedang, or Tinggi.
+    """
+    key_feats = ["umur", "imt", "sistolik", "diastolik", "kolesterol", "gds_1"]
+    key_feats = [f for f in key_feats if f in df.columns]
+
+    cluster_means = df.groupby("cluster")[key_feats].mean()
+    rank_labels, _ = _rank_clusters_by_risk(cluster_means)
+
+    # Convert internal labels to display labels
+    label_map = {
+        "RELATIF SEHAT": "Sehat",
+        "RISIKO SEDANG": "Sedang",
+        "RISIKO TINGGI": "Tinggi",
+    }
+    return {cl: label_map.get(lbl, "Sedang") for cl, lbl in rank_labels.items()}
 
 
 @bp.route("/gis")
@@ -19,16 +41,18 @@ def index():
         return redirect(url_for("upload.index"))
 
     df = session_data.df_result.copy()
+    features = session_data.features or []
 
-    # Calculate risk for each individual
-    risks = df.apply(calculate_individual_risk, axis=1)
+    # Use actual K-Means cluster results with relative risk ranking
+    cluster_risk_map = _get_cluster_risk_map(df, features)
+    df["risk_level"] = df["cluster"].map(cluster_risk_map)
+
     total = len(df)
-    sehat = sum(1 for r in risks if r["level"] == "Sehat")
-    sedang = sum(1 for r in risks if r["level"] == "Sedang")
-    tinggi = sum(1 for r in risks if r["level"] == "Tinggi")
+    sehat = int((df["risk_level"] == "Sehat").sum())
+    sedang = int((df["risk_level"] == "Sedang").sum())
+    tinggi = int((df["risk_level"] == "Tinggi").sum())
 
     # Aggregate per desa
-    df["risk_level"] = [r["level"] for r in risks]
     desa_table = []
     for desa_name in sorted(df["desa"].unique()):
         df_d = df[df["desa"] == desa_name]

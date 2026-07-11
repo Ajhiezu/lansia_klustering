@@ -88,7 +88,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for feat in ["umur", "imt", "sistol", "gula_darah", "kolesterol"] %}
+                            {% for feat in ["umur", "imt", "sistolik", "gula_darah", "kolesterol"] %}
                             {% if feat in summary.features %}
                             <tr>
                                 <td class="fw-bold text-capitalize">{{ feat.replace('_', ' ') }}</td>

@@ -159,9 +159,11 @@ def plot_distribusi_imt(df: pd.DataFrame, out_dir: Path):
 
 def plot_distribusi_td(df: pd.DataFrame, out_dir: Path):
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    col_sis = "sistolik" if "sistolik" in df.columns else "sistol"
+    col_dia = "diastolik" if "diastolik" in df.columns else "diastol"
     for ax, col, label, color in [
-        (axes[0], "sistol",  "Tekanan Darah Sistolik (mmHg)",  "#E74C3C"),
-        (axes[1], "diastol", "Tekanan Darah Diastolik (mmHg)", "#9B59B6"),
+        (axes[0], col_sis,  "Tekanan Darah Sistolik (mmHg)",  "#E74C3C"),
+        (axes[1], col_dia, "Tekanan Darah Diastolik (mmHg)", "#9B59B6"),
     ]:
         valid = df[col].dropna()
         ax.hist(valid, bins=25, color=color, alpha=0.8, edgecolor="white")
@@ -172,10 +174,16 @@ def plot_distribusi_td(df: pd.DataFrame, out_dir: Path):
 
 
 def plot_heatmap_korelasi(df: pd.DataFrame, out_dir: Path):
-    num_cols = [c for c in [
-        "umur", "imt", "sistol", "diastol",
-        "hb", "kolesterol", "gula_darah", "asam_urat"
-    ] if c in df.columns]
+    cols = ["umur", "imt", "hb", "kolesterol", "gula_darah", "asam_urat"]
+    for s in ["sistolik", "sistol"]:
+        if s in df.columns:
+            cols.append(s)
+            break
+    for d in ["diastolik", "diastol"]:
+        if d in df.columns:
+            cols.append(d)
+            break
+    num_cols = [c for c in cols if c in df.columns]
 
     if len(num_cols) < 3:
         return
@@ -210,7 +218,8 @@ def plot_jumlah_per_cluster(df: pd.DataFrame, out_dir: Path):
 
 def plot_radar_cluster(df: pd.DataFrame, features: list, out_dir: Path):
     """Radar chart rata-rata fitur utama per cluster."""
-    feats = [f for f in ["umur", "imt", "sistol", "hb",
+    col_sis = "sistolik" if "sistolik" in df.columns else "sistol"
+    feats = [f for f in ["umur", "imt", col_sis, "hb",
                           "kolesterol", "gula_darah", "asam_urat"]
              if f in features and f in df.columns]
     if len(feats) < 3 or "cluster" not in df.columns:

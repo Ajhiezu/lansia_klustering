@@ -1,18 +1,20 @@
 """
-gis_service.py - Service to generate Folium maps from clustering results.
+gis_service.py - Service to generate Folium maps from clustering results using geopandas.
 Integrates village GeoJSON boundaries with aggregated risk analysis and filtering.
 """
 
 import json
 import logging
 import folium
+import geopandas as gpd
+import pandas as pd
 from app.models.session_data import session_data
 from app.core.config import BASE_DIR
 
 logger = logging.getLogger("lansia.service.gis")
 
 # Path to GeoJSON file with village boundaries
-GEOJSON_PATH = BASE_DIR / "tempeh_desa.geojson"
+GEOJSON_PATH = BASE_DIR / "batas_desa_maesan.geojson"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -82,16 +84,20 @@ def get_village_color(pct: float, risk_filter: str) -> str:
         return "#ef4444"
 
 
-def load_geojson() -> dict:
-    """Load the GeoJSON village boundaries file."""
+def load_maesan_gdf() -> gpd.GeoDataFrame:
+    """Load the GeoJSON village boundaries file using geopandas and ensure EPSG:4326."""
     if not GEOJSON_PATH.exists():
         logger.warning(f"File GeoJSON tidak ditemukan: {GEOJSON_PATH}")
         return None
     try:
-        with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        gdf_maesan = gpd.read_file(GEOJSON_PATH)
+        # Ensure CRS is EPSG:4326
+        if gdf_maesan.crs is None or gdf_maesan.crs.to_string() != "EPSG:4326":
+            logger.info("Mengonversi sistem koordinat GeoJSON ke EPSG:4326")
+            gdf_maesan = gdf_maesan.to_crs("EPSG:4326")
+        return gdf_maesan
     except Exception as e:
-        logger.error(f"Error loading GeoJSON: {e}")
+        logger.error(f"Error loading GeoJSON with geopandas: {e}")
         return None
 
 
@@ -99,7 +105,10 @@ def _normalize_desa_name(name: str) -> str:
     """Normalize desa name for matching between GeoJSON and dataset."""
     if not name:
         return ""
-    return str(name).strip().upper()
+    # Capitalize, strip spaces, and remove special characters/excessive spacing
+    normalized = str(name).strip().upper()
+    normalized = " ".join(normalized.split())
+    return normalized
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -109,62 +118,102 @@ def _normalize_desa_name(name: str) -> str:
 def generate_map(risk_filter: str = "all") -> str:
     """
     Generate an interactive Folium map based on clustering results.
-    Uses GeoJSON village boundaries (choropleth polygons) only — no individual markers.
+    Uses GeoJSON village boundaries (choropleth polygons) only.
 
     Args:
         risk_filter: Filter risk level ('all', 'sehat', 'sedang', 'tinggi')
     Returns:
         HTML string of the map
     """
-    from app.core.utils import calculate_individual_risk
+    from app.core.clustering import _rank_clusters_by_risk
 
     if not session_data.has_data():
         logger.warning("No session data available for GIS mapping.")
         return ""
 
     df = session_data.df_result.copy()
-    geojson_data = load_geojson()
+    
+    # Load Geopandas GeoDataFrame
+    gdf_maesan = load_maesan_gdf()
+    if gdf_maesan is None:
+        return ""
 
-    # Pre-calculate individual risk scores and levels
-    risk_info_list = [calculate_individual_risk(row) for _, row in df.iterrows()]
-    df["risk_score"] = [r["score"] for r in risk_info_list]
-    df["risk_level"] = [r["level"] for r in risk_info_list]
-    df["risk_color"] = [r["color"] for r in risk_info_list]
+    # ── Use actual K-Means cluster results with relative risk ranking ──
+    key_feats = ["umur", "imt", "sistolik", "diastolik", "kolesterol", "gds_1"]
+    key_feats = [f for f in key_feats if f in df.columns]
 
-    # Save details to session_data
-    session_data.df_result["risk_score"] = df["risk_score"]
+    cluster_means = df.groupby("cluster")[key_feats].mean()
+    rank_labels, _ = _rank_clusters_by_risk(cluster_means)
+
+    # Convert internal labels to display labels
+    label_map = {
+        "RELATIF SEHAT": "Sehat",
+        "RISIKO SEDANG": "Sedang",
+        "RISIKO TINGGI": "Tinggi",
+    }
+    cluster_risk_map = {cl: label_map.get(lbl, "Sedang") for cl, lbl in rank_labels.items()}
+
+    df["risk_level"] = df["cluster"].map(cluster_risk_map)
+
+    # Save to session_data
     session_data.df_result["risk_level"] = df["risk_level"]
-    session_data.df_result["risk_color"] = df["risk_color"]
 
     # Calculate aggregations per Desa
-    desa_stats = {}
-    for desa_name in df["desa"].unique():
-        dn_upper = _normalize_desa_name(desa_name)
-        df_desa = df[df["desa"].str.upper().str.strip() == dn_upper]
-        sehat = int((df_desa["risk_level"] == "Sehat").sum())
-        sedang = int((df_desa["risk_level"] == "Sedang").sum())
-        tinggi = int((df_desa["risk_level"] == "Tinggi").sum())
-        total = len(df_desa)
-        pct_sehat = round(sehat / total * 100, 1) if total > 0 else 0
-        pct_sedang = round(sedang / total * 100, 1) if total > 0 else 0
-        pct_tinggi = round(tinggi / total * 100, 1) if total > 0 else 0
-        pct_risiko = round((sedang + tinggi) / total * 100, 1) if total > 0 else 0
-        desa_stats[dn_upper] = {
-            "sehat": sehat,
-            "sedang": sedang,
-            "tinggi": tinggi,
-            "total": total,
-            "pct_sehat": pct_sehat,
-            "pct_sedang": pct_sedang,
-            "pct_tinggi": pct_tinggi,
-            "pct_risiko": pct_risiko,
-        }
+    df["desa_norm"] = df["desa"].apply(_normalize_desa_name)
+    df_grouped = df.groupby("desa_norm").agg(
+        sehat=("risk_level", lambda x: int((x == "Sehat").sum())),
+        sedang=("risk_level", lambda x: int((x == "Sedang").sum())),
+        tinggi=("risk_level", lambda x: int((x == "Tinggi").sum())),
+        total=("risk_level", "count")
+    ).reset_index()
+
+    # Normalize GeoJSON desa columns
+    gdf_maesan["DESA_NORM"] = gdf_maesan["DESA"].apply(_normalize_desa_name)
+    gdf_maesan["ALT_NORM"] = gdf_maesan["DESKEL u_7"].apply(_normalize_desa_name)
+
+    # Perform Join (merge)
+    # Primary merge on DESA_NORM
+    gdf_merged = gdf_maesan.merge(df_grouped, left_on="DESA_NORM", right_on="desa_norm", how="left")
+    
+    # Secondary merge fallback on ALT_NORM for unmatched rows
+    unmatched_mask = gdf_merged["total"].isna()
+    if unmatched_mask.any():
+        df_grouped_alt = df_grouped.rename(columns={"desa_norm": "alt_norm"})
+        gdf_alt_merged = gdf_maesan.merge(df_grouped_alt, left_on="ALT_NORM", right_on="alt_norm", how="left")
+        for col in ["sehat", "sedang", "tinggi", "total"]:
+            gdf_merged.loc[unmatched_mask, col] = gdf_alt_merged.loc[unmatched_mask, col]
+
+    # Fill NaN values with 0
+    for col in ["sehat", "sedang", "tinggi", "total"]:
+        gdf_merged[col] = gdf_merged[col].fillna(0).astype(int)
+
+    # Calculate percentages
+    gdf_merged["pct_sehat"] = (gdf_merged["sehat"] / gdf_merged["total"] * 100).round(1).fillna(0)
+    gdf_merged["pct_sedang"] = (gdf_merged["sedang"] / gdf_merged["total"] * 100).round(1).fillna(0)
+    gdf_merged["pct_tinggi"] = (gdf_merged["tinggi"] / gdf_merged["total"] * 100).round(1).fillna(0)
+    gdf_merged["pct_risiko"] = ((gdf_merged["sedang"] + gdf_merged["tinggi"]) / gdf_merged["total"] * 100).round(1).fillna(0)
+
+    # ── VALIDATION: PRINT UNMATCHED VILLAGES ──
+    # Check GeoJSON villages that don't have cluster data
+    unmatched_geojson = gdf_merged[gdf_merged["total"] == 0]
+    if not unmatched_geojson.empty:
+        logger.info("=== VALIDASI SPASIAL: DESA GEOJSON TANPA DATA KLASTER (UNMATCHED) ===")
+        for _, row_g in unmatched_geojson.iterrows():
+            logger.info(f" GeoJSON Desa: {row_g['DESA']} ({row_g['DESKEL u_7']}) - Tidak ada data lansia")
+
+    # Check Dataset villages that are missing from GeoJSON boundaries
+    all_geojson_names = set(gdf_merged["DESA_NORM"].tolist() + gdf_merged["ALT_NORM"].tolist())
+    unmatched_dataset = df_grouped[~df_grouped["desa_norm"].isin(all_geojson_names)]
+    if not unmatched_dataset.empty:
+        logger.warning("=== VALIDASI SPASIAL: DESA DATASET TANPA BATAS GEOJSON ===")
+        for _, row_d in unmatched_dataset.iterrows():
+            logger.warning(f" Dataset Desa: {row_d['desa_norm']} - Batas GeoJSON tidak ditemukan!")
 
     risk_filter = str(risk_filter).lower().strip()
 
-    # Default center (Tempeh, Lumajang)
-    center_lat, center_lon = -8.21, 113.19
-    m = folium.Map(
+    # Default center (Maesan, Bondowoso)
+    center_lat, center_lon = -8.0241, 113.7668
+    peta_maesan = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=13,
         tiles="CartoDB positron",
@@ -176,23 +225,29 @@ def generate_map(risk_filter: str = "all") -> str:
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         attr="Esri World Imagery",
         name="Esri Satellite"
-    ).add_to(m)
+    ).add_to(peta_maesan)
 
     # Feature group for village boundaries
-    boundary_layer = folium.FeatureGroup(name="Batas Wilayah Desa", show=True).add_to(m)
+    boundary_layer = folium.FeatureGroup(name="Batas Wilayah Desa", show=True).add_to(peta_maesan)
+
+    # Convert GDF to geojson dictionary format to draw polygons
+    geojson_data = json.loads(gdf_merged.to_json())
 
     # ── DRAW VILLAGE BOUNDARY POLYGONS (GeoJSON) ──
     if geojson_data:
         for feature in geojson_data.get("features", []):
             props = feature.get("properties", {})
-            desa_geojson_name = _normalize_desa_name(props.get("DESA", ""))
-            alt_name = _normalize_desa_name(props.get("DESKEL u_7", ""))
-
-            # Try to match stats by primary name or alt name
-            stats = desa_stats.get(desa_geojson_name) or desa_stats.get(alt_name)
-            if not stats:
-                stats = {"sehat": 0, "sedang": 0, "tinggi": 0, "total": 0,
-                         "pct_sehat": 0, "pct_sedang": 0, "pct_tinggi": 0, "pct_risiko": 0}
+            
+            stats = {
+                "sehat": int(props.get("sehat", 0)),
+                "sedang": int(props.get("sedang", 0)),
+                "tinggi": int(props.get("tinggi", 0)),
+                "total": int(props.get("total", 0)),
+                "pct_sehat": float(props.get("pct_sehat", 0.0)),
+                "pct_sedang": float(props.get("pct_sedang", 0.0)),
+                "pct_tinggi": float(props.get("pct_tinggi", 0.0)),
+                "pct_risiko": float(props.get("pct_risiko", 0.0))
+            }
 
             has_data = stats["total"] > 0
 
@@ -281,7 +336,6 @@ def generate_map(risk_filter: str = "all") -> str:
             ).add_to(boundary_layer)
 
 
-
     # ── ADD LEGEND ──
     legend_container_style = """
         position: fixed;
@@ -350,12 +404,12 @@ def generate_map(risk_filter: str = "all") -> str:
         </div>
         """
 
-    m.get_root().html.add_child(folium.Element(legend_html))
+    peta_maesan.get_root().html.add_child(folium.Element(legend_html))
 
     # Add Layer Control
-    folium.LayerControl(position="topright").add_to(m)
+    folium.LayerControl(position="topright").add_to(peta_maesan)
 
     # Save to session
-    map_html = m._repr_html_()
+    map_html = peta_maesan._repr_html_()
     session_data.gis_map_html = map_html
     return map_html
